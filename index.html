@@ -948,7 +948,37 @@ function ocrFiles(files, onProg){
 var CAT_WORDS = [['Tests', /\b(tests?|exams?|midterm|final|major|summative|assessments?|unit test)\b/i], ['Quizzes', /\bquiz/i], ['Labs', /\blabs?\b/i], ['Homework', /\b(hw|homework)\b/i], ['Projects', /\bprojects?\b/i], ['Essays', /\b(essays?|papers?|writing)\b/i], ['Classwork', /\b(classwork|class work|cw|in-class|activit(y|ies)|worksheets?|formative|minor)\b/i], ['Participation', /\b(participation|discussions?|seminar)\b/i]];
 function guessCatName(line){ for (var i = 0; i < CAT_WORDS.length; i++) if (CAT_WORDS[i][1].test(line)) return CAT_WORDS[i][0]; return 'Assignments'; }
 var SHOT_DROP = /\b(major|minor|assessments?|summative|formative|type|assignment)\b/gi;
-function parseShotText(text, cls){
+function titleCase(w){ return w.toLowerCase().replace(/\b[a-z]/g, function(c){ return c.toUpperCase(); }); }
+var NOT_HEADER = /\b(type|assignments?|due|points|score|cumulative|grade|average|avg|progress|notes?|status|date|total|marking|period|semester|quarter|term|teacher|details?|gradebook|view|show|all)\b/i;
+function shotRow(line){
+  var date = '', dm = line.match(DATE_RE), t = line;
+  if (dm) { var y = +dm[3]; if (y < 100) y += 2000; date = y + '-' + String(dm[1]).padStart(2, '0') + '-' + String(dm[2]).padStart(2, '0'); t = t.replace(DATE_RE, ' '); }
+  var status = /\bmissing\b/i.test(t) ? 'missing' : /\b(excused|exempt)\b/i.test(t) ? 'excused' : 'graded';
+  var earned, possible, before, after;
+  var m = t.match(/(\d+(?:\.\d+)?)\s*(?:\/|out of)\s*(\d+(?:\.\d+)?)(?![\d\/])/i);
+  if (m && +m[1] <= +m[2] * 2) { earned = +m[1]; possible = +m[2]; before = t.slice(0, m.index); after = t.slice(m.index + m[0].length); }
+  else {
+    var pm = t.match(/(\d+(?:\.\d+)?)\s*\/\s*/); if (!pm) return null;
+    earned = +pm[1]; before = t.slice(0, pm.index);
+    var rest = t.slice(pm.index + pm[0].length), re = /(^|\s)(\d+(?:\.\d+)?)(?=\s|$)/g, c, pick = null;
+    while ((c = re.exec(rest))) { var v = +c[2]; if (v >= 1 && earned <= v * 2 && v <= 1000) { pick = c; break; } }
+    if (!pick) return null;
+    possible = +pick[2]; after = rest.slice(0, pick.index) + ' ' + rest.slice(pick.index + pick[0].length);
+  }
+  if (status === 'missing') earned = 0;
+  if (!(possible > 0) || possible > 1000 || earned > possible * 2) return null;
+  var tail = after.replace(/\S*%\S*/g, ' ').replace(/(\s+[^a-z\s]*)+\s*$/i, ' ').replace(/^[^a-z]+(?=[a-z])/i, ' ');
+  var text = (before + ' ' + tail).replace(/^[^a-z0-9]+/i, '').replace(/\b\d+(\.\d+)?\s*%/g, ' ').replace(/\b(missing|excused|exempt|graded)\b/gi, ' ').replace(/[.\s]+$/g, ' ').replace(/\s+/g, ' ').trim();
+  return { text: text, earned: earned, possible: possible, date: date, status: status };
+}
+function shotHeader(line, className){
+  if (DATE_RE.test(line) || /\d\s*\/\s*\d/.test(line)) return null;
+  var w = line.match(/(\d+(?:\.\d+)?)\s*%/), name = line.replace(/\(?\s*\d+(\.\d+)?\s*%\s*\)?/g, ' ').replace(/\b(weight|weighted|worth|of grade)\b/gi, ' ').replace(/[^a-z0-9&/ '\-]/gi, ' ').replace(/\s+/g, ' ').trim();
+  if (!/[a-z]{3}/i.test(name) || name.split(' ').length > 4 || name.length > 32 || NOT_HEADER.test(name)) return null;
+  if (className && name.toLowerCase().indexOf(className.toLowerCase().slice(0, 6)) >= 0) return null;
+  return { name: titleCase(name), weight: w ? +w[1] : null };
+}
+function parseShotText(text, cls, className){
   var raw = String(text || '').split(/\r?\n/).map(function(l){ return l.replace(/[|\[\]{}£€©®]/g, ' ').replace(/\s+/g, ' ').trim(); }).filter(Boolean);
   var lines = [];
   for (var k = 0; k < raw.length; k++) {
@@ -956,40 +986,51 @@ function parseShotText(text, cls){
     while (k + 1 < raw.length && (/\d\s*\/\s*$/.test(l) || /^\s*\//.test(raw[k + 1]))) { l += ' ' + raw[++k]; }
     lines.push(l);
   }
-  var cats = cls ? cls.categories.slice().sort(function(a, b){ return b.name.length - a.name.length; }) : [];
-  var out = [], seen = {};
+  className = className || (cls && cls.name) || '';
+  // pass 1: rows + section headers
+  var rows = [], header = null, headerRows = {}, headerW = {};
   lines.forEach(function(line){
     if (!/[a-z]{2}/i.test(line)) return;
-    var date = '', dm = line.match(DATE_RE), t = line;
-    if (dm) { var y = +dm[3]; if (y < 100) y += 2000; date = y + '-' + String(dm[1]).padStart(2, '0') + '-' + String(dm[2]).padStart(2, '0'); t = t.replace(DATE_RE, ' '); }
-    var status = /\bmissing\b/i.test(t) ? 'missing' : /\b(excused|exempt)\b/i.test(t) ? 'excused' : 'graded';
-    var m = t.match(/(\d+(?:\.\d+)?)\s*(?:\/|out of)\s*(\d+(?:\.\d+)?)(?![\d\/])/i), earned, possible, scoreText;
-    if (m) { earned = +m[1]; possible = +m[2]; scoreText = m[0]; }
-    else {
-      var pm = t.match(/(\d+(?:\.\d+)?)\s*\/\s+((?:[^\d\s]\S*\s+)*?)(\d+(?:\.\d+)?)\b/);
-      if (!pm) return;
-      earned = +pm[1]; possible = +pm[3]; scoreText = null;
-      t = t.replace(pm[0], ' ' + pm[2] + ' ');
+    var r = shotRow(line);
+    if (!r) { var h = shotHeader(line, className); if (h) { header = h.name; if (h.weight != null) headerW[h.name] = h.weight; } return; }
+    r.line = line; r.header = header; if (header) headerRows[header] = (headerRows[header] || 0) + 1;
+    rows.push(r);
+  });
+  var useHeaders = Object.keys(headerRows).length >= 2;
+  // pass 2: a type column (first word repeated across rows)
+  var first = {};
+  rows.forEach(function(r){ var w = (r.text.match(/^[A-Za-z]{3,}/) || [''])[0].toLowerCase(); if (w) first[w] = (first[w] || 0) + 1; });
+  var typeWords = Object.keys(first).filter(function(w){ return first[w] >= 2; });
+  var covered = rows.filter(function(r){ return typeWords.indexOf((r.text.match(/^[A-Za-z]{3,}/) || [''])[0].toLowerCase()) >= 0; }).length;
+  var useTypes = !useHeaders && typeWords.length >= 2 && covered >= rows.length * 0.6;
+  var cats = cls ? cls.categories : [];
+  var findCat = function(n){ var x = n.toLowerCase(); return cats.find(function(c){ return c.name.toLowerCase() === x; }) || cats.find(function(c){ var y = c.name.toLowerCase(); return y.indexOf(x) >= 0 || x.indexOf(y) >= 0; }); };
+  var out = [], seen = {};
+  rows.forEach(function(r){
+    var name = r.text, catName = null;
+    if (useHeaders && r.header) catName = r.header;
+    else if (useTypes) {
+      var fw = (name.match(/^[A-Za-z]{3,}/) || [''])[0];
+      if (fw && typeWords.indexOf(fw.toLowerCase()) >= 0) {
+        var g = guessCatName(fw); catName = g !== 'Assignments' ? g : titleCase(fw);
+        var rest = name.slice(fw.length).replace(/^[\s:\-–]+/, ''); if (/[a-z]/i.test(rest)) name = rest;
+      }
     }
-    if (status === 'missing') earned = 0;
-    if (!(possible > 0) || possible > 1000 || earned > possible * 2) return;
-    if (scoreText) t = t.replace(scoreText, ' ');
-    t = t.replace(/\b\d+(\.\d+)?\s*%/g, ' ').replace(/(\s[\d.,()%:;\-]+)+\s*$/g, ' ').replace(/\b(missing|excused|exempt|graded)\b/gi, ' ');
-    var lower = line.toLowerCase(), cat = null;
-    for (var c = 0; c < cats.length; c++) if (lower.indexOf(cats[c].name.toLowerCase()) >= 0) { cat = cats[c]; break; }
-    var catName = cat ? cat.name : guessCatName(line);
-    if (!cat && cls && cls.categories.length) { cat = cls.categories.find(function(x){ return guessCatName(x.name) === catName; }) || cls.categories[0]; catName = cat.name; }
-    var name = t.replace(SHOT_DROP, ' ').replace(/\s+/g, ' ').trim();
-    name = name.replace(/^(homework|hw|lab|labs|quiz|quizzes|classwork|project|projects|essay|participation)\s+(?=\S)/i, function(w, a, off, str){ return /^(lab|quiz|project|essay)$/i.test(a) && str.split(' ').length <= 2 ? w : ''; });
+    if (!catName && cats.length) { var lower = r.line.toLowerCase(); var hit = cats.slice().sort(function(a, b){ return b.name.length - a.name.length; }).find(function(c){ return lower.indexOf(c.name.toLowerCase()) >= 0; }); if (hit) catName = hit.name; }
+    if (!catName) catName = guessCatName(r.line);
+    var ex = cats.length ? findCat(catName) : null; if (ex) catName = ex.name;
+    name = name.replace(SHOT_DROP, ' ').replace(/\s+/g, ' ').trim();
     name = name.replace(/\b(\w+)( \1\b)+/gi, '$1').replace(/^[^a-z0-9]+|[^a-z0-9)?!]+$/gi, '').trim();
     if (name.length < 2) return;
-    var key = name.toLowerCase() + '|' + possible; if (seen[key]) return; seen[key] = 1;
-    out.push({ name: name.slice(0, 80), earned: earned, possible: possible, date: date, status: status, catId: cat ? cat.id : null, catName: catName });
+    var key = name.toLowerCase() + '|' + r.possible; if (seen[key]) return; seen[key] = 1;
+    out.push({ name: name.slice(0, 80), earned: r.earned, possible: r.possible, date: r.date, status: r.status, catId: ex ? ex.id : null, catName: catName });
   });
+  var hw = useHeaders ? headerW : {}, sum = Object.keys(hw).reduce(function(t, k){ return t + hw[k]; }, 0);
+  out.weights = (sum >= 95 && sum <= 105) ? hw : {};
   return out;
 }
 function openShotSheet(cls){
-  var isNew = !cls, items = [];
+  var isNew = !cls, items = [], weights = {};
   var body = (isNew ? '<div class="sec"><div class="group"><div class="row"><input class="inline full" id="sh-name" placeholder="Class name, like AP Biology" autocomplete="off" aria-label="Class name"></div></div></div>' : '') +
     '<div class="sec"><label class="pick" for="sh-file">Choose Screenshots<small>On Blackbaud, open the class and screenshot the assignment list. Pick one or more.</small></label>' +
     '<input type="file" id="sh-file" accept="image/*" multiple hidden></div><div id="sh-status"></div><div id="sh-prev"></div><p class="err" id="sh-err" role="alert"></p>' +
@@ -1005,8 +1046,9 @@ function openShotSheet(cls){
           '<span class="row-val strong num">' + (it.status === 'missing' ? 'Missing' : it.status === 'excused' ? 'Excused' : pts(it.earned) + '/' + pts(it.possible)) + '</span><button class="minus" data-i="' + i + '" aria-label="Remove ' + esc(it.name) + '">−</button></div>'; }).join('') +
         '</div><p class="sec-f">Tap − to drop anything it misread. You can fix scores later by tapping them.</p></div>';
       if (isNew) h += '<div class="sec"><h2 class="sec-h">Category Weights (Optional)</h2><div class="group">' + cats.map(function(c){
-        return '<div class="row"><label class="row-label" for="w-' + esc(c) + '">' + esc(c) + '</label><input class="inline num sh-w" id="w-' + esc(c) + '" data-cat="' + esc(c) + '" type="number" inputmode="decimal" placeholder="%" style="width:4em"></div>'; }).join('') +
-        '</div><p class="sec-f">Leave these blank if your class uses total points.</p></div>';
+        return '<div class="row"><label class="row-label" for="w-' + esc(c) + '">' + esc(c) + '</label><input class="inline num sh-w" id="w-' + esc(c) + '" data-cat="' + esc(c) + '" type="number" inputmode="decimal" placeholder="%" value="' + (weights[c] != null ? weights[c] : '') + '" style="width:4em"></div>'; }).join('') +
+        '</div><p class="sec-f">' + cats.length + (cats.length === 1 ? ' category' : ' categories') + ' found. Put in each one’s weight, or leave them blank if your class uses total points.</p></div>';
+      else { var newCats = cats.filter(function(c){ return !cls.categories.some(function(x){ return x.name.toLowerCase() === String(c).toLowerCase(); }); }); if (newCats.length) h += '<p class="sec-f">New ' + (newCats.length === 1 ? 'category' : 'categories') + ': ' + newCats.map(esc).join(', ') + '. Set ' + (newCats.length === 1 ? 'its weight' : 'their weights') + ' in Edit after adding.</p>'; }
       prev.innerHTML = h; btn.disabled = false;
     };
     prev.addEventListener('click', function(e){ var m = e.target.closest('.minus'); if (!m) return; items.splice(+m.getAttribute('data-i'), 1); draw(); });
@@ -1017,7 +1059,8 @@ function openShotSheet(cls){
       ocrFiles(files, function(i, n, p){ var m = $('#sh-msg', root), b = $('#sh-bar', root); if (m) m.textContent = 'Reading screenshot ' + (i + 1) + ' of ' + n + '…'; if (b) b.style.width = Math.round(((i + (p || 0)) / n) * 100) + '%'; })
         .then(function(text){
           status.innerHTML = '';
-          var found = parseShotText(text, cls), keys = {};
+          var found = parseShotText(text, cls, isNew ? ($('#sh-name', root).value || '') : ''), keys = {};
+          Object.keys(found.weights || {}).forEach(function(k){ weights[k] = found.weights[k]; });
           items.concat(cls ? cls.assignments : []).forEach(function(a){ keys[String(a.name).toLowerCase() + '|' + a.possible] = 1; });
           found.forEach(function(f){ if (!keys[f.name.toLowerCase() + '|' + f.possible]) items.push(f); });
           if (!items.length) $('#sh-err', root).textContent = 'Couldn’t find any scores in that screenshot. Make sure the scores (like 18/20) are showing, then try again.';
@@ -1037,7 +1080,9 @@ function openShotSheet(cls){
         if (state.example) { state.classes = state.classes.filter(function(c){ return c === target; }); state.example = false; }
       }
       items.forEach(function(it){
-        var cat = target.categories.find(function(c){ return c.id === it.catId || c.name === it.catName; }) || target.categories[0];
+        var cat = target.categories.find(function(c){ return c.id === it.catId || c.name.toLowerCase() === String(it.catName).toLowerCase(); });
+        if (!cat && it.catName) { cat = { id: uid(), name: it.catName, weight: 0, drop: 0 }; target.categories.push(cat); }
+        cat = cat || target.categories[0];
         target.assignments.push({ id: uid(), name: it.name, catId: cat ? cat.id : null, earned: it.earned, possible: it.possible, date: it.date || '', status: it.status });
       });
       save(); closeSheet(); go('class-' + target.id); render();
