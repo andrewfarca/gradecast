@@ -198,6 +198,9 @@ textarea.paste{display:block;width:100%;min-height:150px;border:0;background:var
 .alert-btns button+button{border-left:.5px solid var(--sep)}
 .alert-btns .destructive{color:var(--danger);font-weight:600}
 
+.slider.plain::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--fc,var(--tint)) var(--fill,50%),var(--track) var(--fill,50%))}
+.slider.plain::-moz-range-track{height:6px;border-radius:3px;background:var(--track)}
+.slider.plain::-moz-range-progress{height:6px;border-radius:3px;background:var(--fc,var(--tint))}
 /* category chips */
 .chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .chips button{border:0;border-radius:999px;padding:6px 12px;font-size:15px;background:var(--fill);color:var(--label)}
@@ -815,26 +818,29 @@ function saveClass(form){
 function openAssignmentSheet(a){
   var cls = getClass(ui.classId), isNew = !a;
   var lastCat = ui.lastCat && cls.categories.some(function(c){ return c.id === ui.lastCat; }) ? ui.lastCat : (cls.categories[0] && cls.categories[0].id);
-  var v = a || { id:null, name:'', catId:lastCat, earned:'', possible:'', date: todayISO(), status:'graded' };
+  var v = a || { id:null, name:'', catId:lastCat, earned:null, possible:null, date: todayISO(), status:'graded' };
   var st = v.status === 'pending' ? 'graded' : v.status;
+  var scoreVal = num(v.possible) != null ? (st === 'graded' && num(v.earned) != null ? pts(num(v.earned)) + '/' + pts(num(v.possible)) : '/' + pts(num(v.possible))) : '';
   var body = '<form id="as-form" novalidate><div class="sec"><div class="group">' +
-    '<div class="row"><input class="inline full" id="af-name" value="' + esc(v.name) + '" placeholder="Assignment name" autocomplete="off" aria-label="Assignment name"></div>' +
-    '<div class="row"><label class="row-label" for="af-earned">Score</label><input class="inline num" id="af-earned" type="number" inputmode="decimal" step="any" value="' + (num(v.earned) == null ? '' : v.earned) + '" placeholder="45" style="width:5em"></div>' +
-    '<div class="row"><label class="row-label" for="af-possible">Out Of</label><input class="inline num" id="af-possible" type="number" inputmode="decimal" step="any" value="' + (num(v.possible) == null ? '' : v.possible) + '" placeholder="50" style="width:5em"></div>' +
-    (cls.categories.length > 1 ? '<div class="row"><label class="row-label" for="af-cat">Category</label><select class="inline" id="af-cat">' + cls.categories.map(function(c){ return '<option value="' + c.id + '"' + (c.id === v.catId ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select></div>' : '') +
-    '<div class="row"><label class="row-label" for="af-date">Date</label><input class="inline" id="af-date" type="date" value="' + esc(v.date || '') + '"></div>' +
-    '</div></div><div class="sec"><div class="seg">' + [['graded','Graded'],['missing','Missing'],['excused','Excused']].map(function(o){ return '<label><input type="radio" name="af-status" value="' + o[0] + '"' + (st === o[0] ? ' checked' : '') + '>' + o[1] + '</label>'; }).join('') + '</div>' +
-    '<p class="sec-f">Missing counts as a 0. Excused doesn’t count.</p></div><p class="err" id="af-err" role="alert"></p>' +
+    '<div class="row"><input class="inline full" id="af-name" value="' + esc(v.name) + '" placeholder="Name, like Unit 4 Test" autocomplete="off" aria-label="Assignment name"></div>' +
+    '<div class="row"><label class="row-label" for="af-score">Score</label><input class="inline num" id="af-score" type="text" inputmode="decimal" value="' + esc(scoreVal) + '" placeholder="18/20" style="width:6em" autocomplete="off"></div>' +
+    '</div></div>' +
+    (cls.categories.length > 1 && cls.method !== 'points' ? '<div class="sec"><h2 class="sec-h">Goes In</h2><div class="seg">' + cls.categories.map(function(c){ return '<label><input type="radio" name="af-cat" value="' + c.id + '"' + (c.id === v.catId ? ' checked' : '') + '>' + esc(c.name) + '</label>'; }).join('') + '</div></div>' : '') +
+    '<div class="sec"><div class="seg">' + [['graded','Graded'],['missing','Missing'],['excused','Excused']].map(function(o){ return '<label><input type="radio" name="af-status" value="' + o[0] + '"' + (st === o[0] ? ' checked' : '') + '>' + o[1] + '</label>'; }).join('') + '</div></div>' +
+    '<p class="err" id="af-err" role="alert"></p>' +
     (isNew ? '' : '<div class="sec"><div class="group"><button type="button" class="row destructive center" data-act="as-del">Delete Assignment</button></div></div>') + '</form>';
-  openSheet(isNew ? 'New Assignment' : 'Assignment', body, { done: isNew ? 'Add' : 'Done', form:'as-form', mount: function(root){
+  openSheet(isNew ? 'New Assignment' : 'Edit Assignment', body, { done: isNew ? 'Add' : 'Save', form:'as-form', mount: function(root){
     var form = $('#as-form', root); form._id = v.id;
     form.addEventListener('submit', function(e){
       e.preventDefault();
-      var status = form.querySelector('input[name=af-status]:checked').value;
-      var data = { name: $('#af-name', form).value.trim() || 'Untitled', earned: num($('#af-earned', form).value), possible: num($('#af-possible', form).value),
-        date: $('#af-date', form).value, catId: $('#af-cat', form) ? $('#af-cat', form).value : (cls.categories[0] && cls.categories[0].id), status: status };
-      if (data.possible == null && status !== 'excused') { $('#af-err', form).textContent = 'Enter how many points it’s out of.'; $('#af-possible', form).focus(); return; }
-      if (status === 'graded' && data.earned == null) { $('#af-err', form).textContent = 'Enter your score.'; $('#af-earned', form).focus(); return; }
+      var status = form.querySelector('input[name=af-status]:checked').value, raw = $('#af-score', form).value.trim();
+      var m = raw.match(/^\s*(\d+(?:\.\d+)?)\s*(?:\/|out of)\s*(\d+(?:\.\d+)?)\s*$/i), only = raw.match(/^\s*\/?\s*(\d+(?:\.\d+)?)\s*$/);
+      var earned = null, possible = null;
+      if (m) { earned = +m[1]; possible = +m[2]; } else if (only && status !== 'graded') possible = +only[1];
+      if (status === 'graded' && !m) { $('#af-err', form).textContent = 'Type the score like 18/20.'; $('#af-score', form).focus(); return; }
+      if (status === 'missing' && possible == null) { $('#af-err', form).textContent = 'Type what it was out of, like /20.'; $('#af-score', form).focus(); return; }
+      var catEl = form.querySelector('input[name=af-cat]:checked');
+      var data = { name: $('#af-name', form).value.trim() || 'Untitled', earned: status === 'graded' ? earned : null, possible: possible, catId: catEl ? catEl.value : (v.catId || (cls.categories[0] && cls.categories[0].id)), status: status, date: v.date || todayISO() };
       ui.lastCat = data.catId;
       if (form._id) Object.assign(cls.assignments.find(function(q){ return q.id === form._id; }), data);
       else cls.assignments.push(Object.assign({ id: uid() }, data));
@@ -898,6 +904,33 @@ function openPasteSheet(){
       parsed.forEach(function(p){ cls.assignments.push(Object.assign({ id: uid() }, p)); });
       save(); closeSheet(); renderClass(ui.classId);
     });
+  }});
+}
+
+/* ---------- what-if on one assignment ---------- */
+function openTrySheet(a){
+  var cls = getClass(ui.classId), sc = scale(), base = compute(cls).pct, P = num(a.possible);
+  if (!(P > 0)) { openAssignmentSheet(a); return; }
+  var start = a.status === 'missing' ? 0 : (num(a.earned) != null ? num(a.earned) : P);
+  var bb = letterOf(base, sc);
+  var body = '<div class="sec"><div class="group">' +
+    '<div class="row"><span class="row-label">Your Grade Now</span><span class="row-val strong num" style="' + gstyle(bb && bb.letter) + '">' + (base == null ? '—' : fmt(base) + '% <span class="tc" style="font-weight:600">' + esc(bb.letter) + '</span>') + '</span></div>' +
+    '<div class="wi"><div class="wi-score"><label for="try-score">If You Got</label><span class="val"><input id="try-score" type="number" inputmode="decimal" step="any" min="0" value="' + pts(start) + '"><span class="of">/ ' + pts(P) + '</span></span></div>' +
+    '<input id="try-range" class="slider plain" type="range" min="0" max="' + P + '" step="' + (P > 40 ? 1 : 0.5) + '" value="' + Math.min(start, P) + '" aria-label="Score" style="margin-top:10px"><div id="try-out"></div></div>' +
+    '</div><p class="sec-f">Just a what-if. Your real grade doesn’t change.</p></div>' +
+    '<div class="sec"><div class="group"><button class="row link" data-act="as-edit-real" data-id="' + a.id + '">Edit This Assignment</button></div></div>';
+  openSheet(a.name || 'Assignment', body, { cancel:'Done', mount: function(root){
+    var inp = $('#try-score', root), rng = $('#try-range', root), out = $('#try-out', root);
+    var upd = function(v){
+      var test = Object.assign({}, cls, { assignments: cls.assignments.map(function(x){ return x.id === a.id ? Object.assign({}, x, { earned: v, status:'graded' }) : x; }) });
+      var np = compute(test).pct, nb = letterOf(np, sc), d = (np != null && base != null) ? np - base : null, k = gkey(nb && nb.letter);
+      rng.style.setProperty('--fill', (Math.min(v, P) / P * 100) + '%'); rng.style.setProperty('--fc', k ? 'var(--g-' + k + ')' : 'var(--tint)');
+      out.innerHTML = '<div class="wi-result"><span>New Grade</span><div><div class="wi-new" style="' + gstyle(nb && nb.letter) + '"><span class="p">' + fmt(np) + '%</span><span class="l">' + esc(nb ? nb.letter : '') + '</span></div>' +
+        '<div class="wi-delta">' + (d == null ? '' : Math.abs(d) < 0.005 ? 'Same as now' : (d > 0 ? '+' : '−') + fmt(Math.abs(d)) + '% from now') + '</div></div></div>';
+    };
+    rng.addEventListener('input', function(){ var v = +rng.value; inp.value = pts(v); upd(v); });
+    inp.addEventListener('input', function(){ var v = num(inp.value); if (v != null && v >= 0) { rng.value = Math.min(v, P); upd(v); } });
+    upd(start);
   }});
 }
 
@@ -1351,7 +1384,8 @@ var actions = {
   'cat-add': function(){ $('#cat-add').insertAdjacentHTML('beforebegin', catRow({ id: uid(), name:'', weight:'' })); var rows = $$('#cf-cats .cat-row'); $('[data-cf=name]', rows[rows.length - 1]).focus(); $('#class-form').dispatchEvent(new Event('input')); },
   'cat-del': function(el){ if ($$('#cf-cats .cat-row').length <= 1) return; el.closest('.cat-row').remove(); $('#class-form').dispatchEvent(new Event('input')); },
   'as-new': function(){ openAssignmentSheet(null); },
-  'as-edit': function(el){ var a = getClass(ui.classId).assignments.find(function(x){ return x.id === el.getAttribute('data-id'); }); if (a) openAssignmentSheet(a); },
+  'as-edit': function(el){ var a = getClass(ui.classId).assignments.find(function(x){ return x.id === el.getAttribute('data-id'); }); if (a) openTrySheet(a); },
+  'as-edit-real': function(el){ var a = getClass(ui.classId).assignments.find(function(x){ return x.id === el.getAttribute('data-id'); }); if (a) openAssignmentSheet(a); },
   'as-del': function(){ var cls = getClass(ui.classId), id = $('#as-form')._id; cls.assignments = cls.assignments.filter(function(a){ return a.id !== id; }); save(); closeSheet(); renderClass(ui.classId); },
   'as-paste': openPasteSheet,
   'sim-cat': function(el){ var cls = getClass(ui.classId); simFor(cls).catId = el.getAttribute('data-id'); $$('.chips [data-act=sim-cat]').forEach(function(b){ b.setAttribute('aria-pressed', b === el); }); ui.zoneKey = null; previewPing(); refreshSim(); },
