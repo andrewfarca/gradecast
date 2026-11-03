@@ -979,7 +979,7 @@ var CAT_WORDS = [['Tests', /\b(tests?|exams?|midterm|final|major|summative|asses
 function guessCatName(line){ for (var i = 0; i < CAT_WORDS.length; i++) if (CAT_WORDS[i][1].test(line)) return CAT_WORDS[i][0]; return 'Assignments'; }
 var SHOT_DROP = /\b(major|minor|assessments?|summative|formative|type|assignment)\b/gi;
 function titleCase(w){ return w.toLowerCase().replace(/\b[a-z]/g, function(c){ return c.toUpperCase(); }); }
-var NOT_HEADER = /\b(type|assignments?|due|points|score|cumulative|grade|average|avg|progress|notes?|status|date|total|marking|period|semester|quarter|term|teacher|details?|gradebook|view|show|all)\b/i;
+var NOT_HEADER = /\b(type|assignments?|due|points|score|cumulative|grade|average|avg|progress|notes?|status|date|total|marking|period|semester|quarter|term|teacher|details?|gradebook|view|show|all|see|feedback|rubric|turned|policy|late|written|found|earned|possible|weight|evaluation|comment|exempt|incomplete|missing|calculation|percentage|breakdown|previous|next|close|current|credit|work|syllabus|unit)\b/i;
 function shotRow(line){
   var date = '', dm = line.match(DATE_RE), t = line;
   if (dm) { var y = +dm[3]; if (y < 100) y += 2000; date = y + '-' + String(dm[1]).padStart(2, '0') + '-' + String(dm[2]).padStart(2, '0'); t = t.replace(DATE_RE, ' '); }
@@ -1003,6 +1003,8 @@ function shotRow(line){
 }
 function shotHeader(line, className){
   if (DATE_RE.test(line) || /\d\s*\/\s*\d/.test(line)) return null;
+  if (/^[a-z]/.test(line)) return null;
+  line = line.replace(/\(\s*[A-Z]{1,2}\s*\)/g, ' ');
   var w = line.match(/(\d+(?:\.\d+)?)\s*%/), name = line.replace(/\(?\s*\d+(\.\d+)?\s*%\s*\)?/g, ' ').replace(/\b(weight|weighted|worth|of grade)\b/gi, ' ').replace(/[^a-z0-9&/ '\-]/gi, ' ').replace(/\s+/g, ' ').trim();
   if (!/[a-z]{3}/i.test(name) || name.split(' ').length > 4 || name.length > 32 || NOT_HEADER.test(name)) return null;
   if (className && name.toLowerCase().indexOf(className.toLowerCase().slice(0, 6)) >= 0) return null;
