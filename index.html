@@ -1,0 +1,1203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0D0F1E">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Gradecast</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="See your grade, and what your next test will do to it, using your school's own letter cutoffs.">
+<style>
+/* Layout: one centered column (max 680px) of iOS-style inset grouped lists.
+   The only color on screen is the grade color (green A -> red F); blue is reserved for things you can tap. */
+:root{
+  --bg:#F2F2F7;
+  --cell:#FFFFFF;
+  --fill:rgba(118,118,128,.12);
+  --label:#000000;
+  --label2:#6C6C70;
+  --label3:#AEAEB2;
+  --sep:rgba(60,60,67,.2);
+  --tint:#0062D6;
+  --danger:#D70015;
+  --track:#E5E5EA;
+  --bar:rgba(242,242,247,.82);
+  --g-a:#34C759; --g-b:#9BCB3B; --g-c:#FFCC00; --g-d:#FF9500; --g-f:#FF3B30;
+  --t-a:#1D7A33; --t-b:#4F7A0A; --t-c:#8A6500; --t-d:#B04F00; --t-f:#D70015;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,"Segoe UI",Roboto,sans-serif;
+  --font-display:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",system-ui,"Segoe UI",Roboto,sans-serif;
+  --font-round:ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#000000; --cell:#1C1C1E; --fill:rgba(118,118,128,.24); --label:#FFFFFF; --label2:#98989F; --label3:#636366;
+    --sep:rgba(84,84,88,.6); --tint:#0A84FF; --danger:#FF453A; --track:#2C2C2E; --bar:rgba(0,0,0,.78);
+    --g-a:#30D158; --g-b:#A8D84A; --g-c:#FFD60A; --g-d:#FF9F0A; --g-f:#FF453A;
+    --t-a:#30D158; --t-b:#A8D84A; --t-c:#FFD60A; --t-d:#FF9F0A; --t-f:#FF453A;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#000000; --cell:#1C1C1E; --fill:rgba(118,118,128,.24); --label:#FFFFFF; --label2:#98989F; --label3:#636366;
+  --sep:rgba(84,84,88,.6); --tint:#0A84FF; --danger:#FF453A; --track:#2C2C2E; --bar:rgba(0,0,0,.78);
+  --g-a:#30D158; --g-b:#A8D84A; --g-c:#FFD60A; --g-d:#FF9F0A; --g-f:#FF453A;
+  --t-a:#30D158; --t-b:#A8D84A; --t-c:#FFD60A; --t-d:#FF9F0A; --t-f:#FF453A;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--label);font:17px/1.35 var(--font);-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+body.locked{overflow:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--bg)}
+h1,h2,h3,p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit;letter-spacing:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--tint);outline-offset:2px;border-radius:8px}
+.num{font-variant-numeric:tabular-nums}
+.col{max-width:680px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* nav bar */
+.navbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bar);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:.5px solid transparent;transition:border-color .2s}
+.navbar.scrolled{border-bottom-color:var(--sep)}
+.navbar-in{position:relative;display:flex;align-items:center;justify-content:space-between;min-height:44px;gap:8px}
+.nav-title{position:absolute;left:50%;transform:translateX(-50%);font-weight:600;font-size:17px;opacity:0;transition:opacity .2s;white-space:nowrap;max-width:55%;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.navbar.scrolled .nav-title{opacity:1}
+.bar-btn{display:inline-flex;align-items:center;gap:2px;min-height:44px;min-width:44px;padding:0 4px;border:0;background:none;color:var(--tint);font-size:17px;text-decoration:none}
+.bar-btn.strong{font-weight:600}
+.bar-btn svg{width:22px;height:22px}
+.bar-btn[disabled]{color:var(--label3);cursor:default}
+
+main{padding-block:4px 64px}
+.large-title{font:700 34px/1.12 var(--font-display);letter-spacing:.005em;padding:4px 0 2px;overflow-wrap:anywhere}
+.subtitle{color:var(--label2);font-size:15px;margin-top:2px}
+
+/* grouped lists */
+.sec{margin-top:30px}
+.sec-h{font-size:13px;line-height:1.3;font-weight:400;color:var(--label2);text-transform:uppercase;letter-spacing:.02em;padding:0 16px 7px}
+.sec-f{font-size:13px;line-height:1.35;color:var(--label2);padding:7px 16px 0}
+.group{background:var(--cell);border-radius:12px;overflow:hidden}
+.row{position:relative;display:flex;align-items:center;gap:12px;min-height:44px;padding:11px 16px;width:100%;border:0;background:none;text-align:left;text-decoration:none;color:inherit}
+.row+.row::before{content:"";position:absolute;top:0;right:0;left:var(--inset,16px);border-top:.5px solid var(--sep)}
+a.row:active,button.row:active{background:var(--fill)}
+@media (hover:hover){a.row:hover,button.row:hover{background:color-mix(in srgb,var(--fill) 55%,transparent)}}
+.row-main{flex:1;min-width:0;display:grid;gap:1px}
+.row-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-sub{font-size:15px;color:var(--label2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-val{color:var(--label2);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.row-val.strong{color:var(--label)}
+.chev{width:8px;height:14px;flex:none;color:var(--label3)}
+.row.link{color:var(--tint)}
+.row.destructive{color:var(--danger)}
+.row.center{justify-content:center}
+.row input.inline,.row select.inline{flex:0 1 auto;width:auto;min-width:0;max-width:60%;border:0;background:none;text-align:right;color:var(--label2);padding:0;font-size:17px;-webkit-appearance:none;appearance:none}
+.row select.inline{padding-right:2px;cursor:pointer;color:var(--tint)}
+.row input.inline:focus{outline:none;color:var(--label)}
+.row input.inline::placeholder{color:var(--label3)}
+.row input.full{max-width:none;width:100%;text-align:left;color:var(--label)}
+.row label.row-label{flex:1;min-width:0}
+
+/* grade ring */
+.ring{position:relative;flex:none;display:grid;place-items:center}
+.ring svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.ring .trk{fill:none;stroke:var(--track)}
+.ring .prg{fill:none;stroke:var(--gc,var(--label3));stroke-linecap:round;transition:stroke-dashoffset .6s cubic-bezier(.3,.7,.2,1),stroke .3s}
+.ring-sm{width:40px;height:40px}
+.ring-sm .ltr{font:700 13px/1 var(--font-round);color:var(--tc,var(--label2))}
+.hero{display:flex;flex-direction:column;align-items:center;gap:14px;padding:22px 0 4px}
+.ring-lg{width:200px;height:200px}
+.ring-lg .inner{display:grid;justify-items:center;gap:2px;position:relative}
+.ring-lg .pct{font:700 40px/1 var(--font-round);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ring-lg .pct small{font-size:22px;font-weight:600;margin-left:1px}
+.ring-lg .ltr{font:600 20px/1.2 var(--font-round);color:var(--tc,var(--label2))}
+.hero-note{font-size:15px;color:var(--label2);text-align:center}
+@keyframes ringIn{from{stroke-dashoffset:var(--c)}}
+.ring-lg .prg.intro{animation:ringIn .9s cubic-bezier(.3,.7,.2,1) both}
+
+/* what-if card */
+.wi{padding:14px 16px 16px;position:relative}
+.wi::before{content:"";position:absolute;top:0;right:0;left:16px;border-top:.5px solid var(--sep)}
+.wi-score{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.wi-score .val{font:600 22px/1 var(--font-round);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:6px}
+.wi-score .val input{width:3.4em;border:0;background:var(--fill);border-radius:8px;padding:6px 8px;text-align:right;font:inherit}
+.wi-score .val .of{color:var(--label2);font-weight:500}
+.slider{-webkit-appearance:none;appearance:none;position:relative;display:block;width:100%;height:36px;margin:0;background:transparent;cursor:pointer}
+.slider::-webkit-slider-runnable-track{height:6px;background:transparent}
+.slider::-moz-range-track{height:6px;background:transparent}
+.slider::-moz-range-progress{background:transparent}
+.slider::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#FFFFFF;margin-top:-11px;box-shadow:0 .5px 4px rgba(0,0,0,.12),0 6px 13px rgba(0,0,0,.12),0 0 0 .5px rgba(0,0,0,.04)}
+.slider::-moz-range-thumb{width:28px;height:28px;border:0;border-radius:50%;background:#FFFFFF;box-shadow:0 .5px 4px rgba(0,0,0,.12),0 6px 13px rgba(0,0,0,.12)}
+.wi-result{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:12px;margin-top:6px;border-top:.5px solid var(--sep)}
+.wi-new{display:flex;align-items:baseline;justify-content:flex-end;gap:8px;font-variant-numeric:tabular-nums}
+.wi-new .p{font:700 28px/1 var(--font-round);letter-spacing:-.01em}
+.wi-new .l{font:600 20px/1 var(--font-round);color:var(--tc)}
+.wi-delta{font-size:15px;color:var(--label2);text-align:right;margin-top:3px;font-variant-numeric:tabular-nums}
+.wi-need{margin-top:12px;display:grid;gap:4px;font-size:15px;color:var(--label2)}
+.wi-need b{color:var(--label);font-weight:600;font-variant-numeric:tabular-nums}
+
+.tc{color:var(--tc)}
+.strike .row-title,.strike .row-val{text-decoration:line-through;opacity:.55}
+.empty{padding:28px 20px;text-align:center;display:grid;gap:6px;justify-items:center}
+.empty p{color:var(--label2);font-size:15px;max-width:34ch}
+.notice{font-size:15px;color:var(--label2);padding:6px 16px;background:var(--cell);border-radius:12px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:18px}
+.notice button{border:0;background:none;color:var(--tint);font-size:15px;padding:4px 0;min-height:36px}
+
+/* scale table */
+.band-row{display:grid;grid-template-columns:minmax(0,1fr) 92px 72px 32px;gap:8px;align-items:center}
+.band-row input{width:100%;min-width:0;border:0;background:var(--fill);border-radius:8px;padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums}
+.band-row input.ltr-in{text-align:left;font-weight:600;background:none;padding-left:0}
+.band-head{font-size:13px;color:var(--label2);min-height:36px;padding-block:8px}
+.band-head span:nth-child(2),.band-head span:nth-child(3){text-align:right;padding-right:8px}
+.minus{display:grid;place-items:center;width:32px;height:32px;border:0;background:none;color:var(--label3);font-size:22px;line-height:1;border-radius:50%}
+.minus:hover,.minus:focus-visible{background:var(--fill);color:var(--danger)}
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--gc,var(--label3));flex:none}
+
+/* sheets */
+#sheet{position:fixed;inset:0;z-index:50;display:grid;place-items:center}
+.sheet-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.4);animation:fade .2s ease}
+.sheet-panel{position:relative;width:min(560px,calc(100% - 32px));max-height:calc(100% - 48px);overflow:auto;background:var(--bg);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);animation:rise .28s cubic-bezier(.2,.8,.2,1)}
+.sheet-bar{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:6px 12px;background:var(--bar);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:.5px solid var(--sep)}
+.sheet-bar h2{font-size:17px;font-weight:600;text-align:center;white-space:nowrap}
+.sheet-bar>:last-child{justify-self:end}
+.sheet-body{padding:0 16px 28px}
+.sheet-body .sec:first-child{margin-top:20px}
+.grabber{display:none}
+@media (max-width:600px){
+  #sheet{place-items:end center}
+  .sheet-panel{width:100%;max-height:94%;border-radius:12px 12px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}
+  .grabber{display:block;position:absolute;top:5px;left:50%;transform:translateX(-50%);width:36px;height:5px;border-radius:3px;background:var(--label3);z-index:3}
+  .sheet-bar{padding-top:12px}
+}
+.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;gap:2px;width:100%}
+.seg label{flex:1;text-align:center;padding:6px 8px;border-radius:7px;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;position:relative}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--cell);box-shadow:0 3px 8px rgba(0,0,0,.12),0 3px 1px rgba(0,0,0,.04);font-weight:600}
+.seg label:has(input:focus-visible){outline:2px solid var(--tint)}
+.err{color:var(--danger);font-size:13px;padding:8px 16px 0}
+.err:empty{display:none}
+.cat-row{display:grid;grid-template-columns:minmax(0,1fr) 84px 32px;gap:8px;align-items:center}
+.cat-row input{width:100%;min-width:0;border:0;background:none;padding:2px 0}
+.cat-row input:focus{outline:none}
+.cat-row input.w{background:var(--fill);border-radius:8px;padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums}
+form[data-method="points"] .w,form[data-method="points"] .w-only{display:none}
+form[data-method="points"] .cat-row{grid-template-columns:minmax(0,1fr) 32px}
+textarea.paste{display:block;width:100%;min-height:150px;border:0;background:var(--cell);border-radius:12px;padding:12px 16px;font:14px/1.45 ui-monospace,"SF Mono",Menlo,monospace;resize:vertical}
+
+/* alert */
+.alert{position:relative;width:min(290px,calc(100% - 48px));background:var(--cell);border-radius:14px;overflow:hidden;text-align:center;animation:pop .2s ease}
+.alert-body{padding:20px 16px 18px}
+.alert h2{font-size:17px;font-weight:600}
+.alert p{font-size:13px;margin-top:4px}
+.alert-btns{display:grid;grid-template-columns:1fr 1fr;border-top:.5px solid var(--sep)}
+.alert-btns button{border:0;background:none;min-height:44px;color:var(--tint);font-size:17px}
+.alert-btns button+button{border-left:.5px solid var(--sep)}
+.alert-btns .destructive{color:var(--danger);font-weight:600}
+
+/* blackbaud */
+.steps{margin:0;padding:12px 16px 14px 36px;display:grid;gap:8px;font-size:15px;line-height:1.4}
+.steps li::marker{color:var(--label2)}
+.bm{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:7px 14px;border-radius:999px;background:var(--fill);color:var(--label);font-weight:600;font-size:15px;text-decoration:none;cursor:grab;user-select:none}
+.bm::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--g-a)}
+.bb-diff{font-size:13px;color:var(--label2);text-align:center;max-width:32ch}
+.welcome{display:grid;justify-items:center;text-align:center;padding-top:28px}
+.welcome .large-title{padding-top:14px}
+.welcome p.tag{color:var(--label2);font-size:17px;margin-top:6px;max-width:30ch}
+.welcome .sec{width:100%;text-align:left}
+.lead{font-size:15px;color:var(--label2);padding:16px 4px 0;line-height:1.45}
+/* motion + live visuals */
+.bar-btn:active{opacity:.4}
+.ring .prg.intro{animation:ringIn .8s cubic-bezier(.3,.7,.2,1) both;animation-delay:var(--d,0s)}
+.ring-lg .prg{transition:stroke-dashoffset .9s cubic-bezier(.25,.8,.25,1),stroke .35s}
+.ring-lg.live .prg{transition:stroke-dashoffset .14s ease-out,stroke .2s}
+.ring-lg .ghost{fill:var(--label);opacity:0;transition:opacity .2s}
+.ring-lg.preview .ghost{opacity:.4}
+.ring-lg .ltr{display:inline-block;transition:color .25s}
+.pop{animation:ltrPop .34s cubic-bezier(.3,1.7,.5,1)}
+@keyframes ltrPop{0%{transform:scale(1)}40%{transform:scale(1.3)}100%{transform:scale(1)}}
+.hero-note{min-height:1.35em;transition:color .2s}
+.hero-note.preview{color:var(--label)}
+.wi-new .l{display:inline-block}
+.track-wrap{position:relative;height:36px;margin-top:10px}
+.zones{position:absolute;left:14px;right:14px;top:50%;height:6px;margin-top:-3px;border-radius:3px;overflow:hidden;display:flex;opacity:.25;pointer-events:none}
+.zones span{height:100%;flex:none;box-sizing:border-box}
+.zones span+span{border-left:2px solid var(--cell)}
+.zones.fillz{opacity:1;clip-path:inset(0 var(--clip,100%) 0 0)}
+.zone-labels{position:relative;height:16px;margin:0 14px 2px}
+.zone-labels span{position:absolute;top:0;transform:translateX(-50%);font:600 11px/16px var(--font-round);color:var(--tc);white-space:nowrap}
+.row.cat-item{display:block}
+.catbar{height:4px;border-radius:2px;background:var(--track);overflow:hidden;margin-top:8px}
+.catbar i{display:block;height:100%;width:0;border-radius:2px;background:var(--gc,var(--label3));transition:width .7s cubic-bezier(.25,.8,.25,1),background-color .25s}
+.view-fwd{animation:pushIn .34s cubic-bezier(.2,.8,.2,1)}
+.view-back{animation:popIn .34s cubic-bezier(.2,.8,.2,1)}
+@keyframes pushIn{from{opacity:0;transform:translateX(28px)}}
+@keyframes popIn{from{opacity:0;transform:translateX(-28px)}}
+.sheet-bar{touch-action:none}
+#sheet.closing .sheet-panel{animation:sink .22s ease-in forwards}
+#sheet.closing .alert,#sheet.closing .sheet-backdrop{animation:fadeOut .2s ease-in forwards}
+@keyframes sink{to{transform:translateY(110%)}}
+@keyframes fadeOut{to{opacity:0}}
+@keyframes fade{from{opacity:0}}
+@keyframes rise{from{transform:translateY(24px);opacity:0}}
+@keyframes pop{from{transform:scale(1.08);opacity:0}}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+@media (prefers-reduced-transparency: reduce){:root{--bar:var(--bg)}}
+</style>
+
+<header class="navbar" id="navbar"><div class="col navbar-in" id="navbar-in"></div></header>
+<main id="main" class="col"></main>
+<div id="sheet" hidden></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- helpers ---------- */
+var $ = function(s, r){ return (r || document).querySelector(s); };
+var $$ = function(s, r){ return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function uid(){ return Math.random().toString(36).slice(2, 10); }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function num(v){ if (v === '' || v == null) return null; var n = parseFloat(v); return isFinite(n) ? n : null; }
+function fmt(n, d){ if (d == null) d = 2; return (n == null || !isFinite(n)) ? '—' : n.toFixed(d); }
+function pts(n){ if (n == null || !isFinite(n)) return '—'; return String(Math.round(n * 100) / 100); }
+var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDate(d){ if (!d) return ''; var p = String(d).split('-'); if (p.length < 3) return d; return MONTHS[(+p[1]) - 1] + ' ' + (+p[2]); }
+function todayISO(){ var t = new Date(); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'); }
+var CHEV = '<svg class="chev" viewBox="0 0 8 14" aria-hidden="true"><path d="M1.5 1.5L6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+var BACK = '<svg viewBox="0 0 12 22" style="width:12px;height:21px" aria-hidden="true"><path d="M10 2L2 11l8 9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+var GEAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M10.3 2.2a1 1 0 0 1 1-.7h1.4a1 1 0 0 1 1 .7l.5 1.9c.6.2 1.2.5 1.7.9l1.9-.6a1 1 0 0 1 1.1.4l.7 1.2a1 1 0 0 1-.1 1.2l-1.4 1.4c.1.6.1 1.3 0 1.9l1.4 1.4a1 1 0 0 1 .1 1.2l-.7 1.2a1 1 0 0 1-1.1.4l-1.9-.6c-.5.4-1.1.7-1.7.9l-.5 1.9a1 1 0 0 1-1 .7h-1.4a1 1 0 0 1-1-.7l-.5-1.9c-.6-.2-1.2-.5-1.7-.9l-1.9.6a1 1 0 0 1-1.1-.4l-.7-1.2a1 1 0 0 1 .1-1.2l1.4-1.4a6 6 0 0 1 0-1.9L4.4 7.7a1 1 0 0 1-.1-1.2l.7-1.2a1 1 0 0 1 1.1-.4l1.9.6c.5-.4 1.1-.7 1.7-.9l.6-2.4ZM12 14.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" transform="translate(0 1)"/></svg>';
+var PLUS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+
+/* ---------- grading scale ---------- */
+function mk(arr){ return arr.map(function(b){ return { letter:b[0], min:b[1], gpa:b[2] }; }); }
+var PRESETS = {
+  draft:   { name:'My school (draft)', rounding:'none', bands: mk([['A',92.5,4],['A-',89.5,3.7],['B+',86.5,3.3],['B',82.5,3],['B-',79.5,2.7],['C+',76.5,2.3],['C',72.5,2],['C-',69.5,1.7],['D+',66.5,1.3],['D',62.5,1],['D-',59.5,0.7],['F',0,0]]) },
+  standard:{ name:'Standard plus/minus', rounding:'none', bands: mk([['A',93,4],['A-',90,3.7],['B+',87,3.3],['B',83,3],['B-',80,2.7],['C+',77,2.3],['C',73,2],['C-',70,1.7],['D+',67,1.3],['D',63,1],['D-',60,0.7],['F',0,0]]) },
+  ten:     { name:'10-point (90/80/70/60)', rounding:'none', bands: mk([['A',90,4],['B',80,3],['C',70,2],['D',60,1],['F',0,0]]) },
+  seven:   { name:'7-point (93/85/77/70)', rounding:'none', bands: mk([['A',93,4],['B',85,3],['C',77,2],['D',70,1],['F',0,0]]) }
+};
+var ROUNDING = { none:'None', whole:'Whole number', tenth:'One decimal' };
+
+function applyRound(p, mode){
+  if (p == null) return null;
+  if (mode === 'whole') return Math.floor(p + 0.5 + 1e-9);
+  if (mode === 'tenth') return Math.floor(p * 10 + 0.5 + 1e-9) / 10;
+  return p;
+}
+function effCut(min, mode){
+  if (mode === 'whole') return Math.ceil(min - 1e-9) - 0.5;
+  if (mode === 'tenth') return Math.ceil(min * 10 - 1e-9) / 10 - 0.05;
+  return min;
+}
+function bandsDesc(scale){ return scale.bands.slice().sort(function(a, b){ return (+b.min) - (+a.min); }); }
+function letterOf(p, scale){
+  if (p == null) return null;
+  var r = applyRound(p, scale.rounding), bands = bandsDesc(scale);
+  for (var i = 0; i < bands.length; i++) if (r >= (+bands[i].min) - 1e-9) return bands[i];
+  return bands[bands.length - 1] || null;
+}
+function gkey(letter){ var c = String(letter || '').trim().charAt(0).toUpperCase(); return ({A:'a',B:'b',C:'c',D:'d',F:'f',E:'f'})[c] || null; }
+function gstyle(letter){ var k = gkey(letter); return k ? '--gc:var(--g-' + k + ');--tc:var(--t-' + k + ')' : ''; }
+function standing(pct, scale){
+  var bands = bandsDesc(scale), b = letterOf(pct, scale), i = bands.indexOf(b);
+  var up = i > 0 ? bands[i - 1] : null;
+  return { band:b, up:up, toUp: up ? effCut(+up.min, scale.rounding) - pct : null,
+    cushion: (b && +b.min > 0 && i < bands.length - 1) ? pct - effCut(+b.min, scale.rounding) : null };
+}
+
+/* ---------- grade math ---------- */
+function counted(a){
+  if (a.status === 'missing') return num(a.possible) != null;
+  if (a.status === 'excused' || a.status === 'pending') return false;
+  return num(a.earned) != null && num(a.possible) != null;
+}
+function scoreOf(a){ return a.status === 'missing' ? 0 : (num(a.earned) || 0); }
+function keptItems(items, cat){
+  var n = Math.max(0, parseInt(cat && cat.drop, 10) || 0);
+  if (!n) return { kept: items, dropped: [] };
+  var scored = items.filter(function(a){ return num(a.possible) > 0; });
+  if (scored.length <= n) return { kept: items, dropped: [] };
+  var drop = scored.slice().sort(function(a, b){ return scoreOf(a) / num(a.possible) - scoreOf(b) / num(b.possible); }).slice(0, n);
+  return { kept: items.filter(function(a){ return drop.indexOf(a) < 0; }), dropped: drop };
+}
+function compute(cls){
+  var cats = cls.categories && cls.categories.length ? cls.categories : [{ id:'_all', name:'All work', weight:100, drop:0 }];
+  var ids = {}; cats.forEach(function(c){ ids[c.id] = []; });
+  cls.assignments.forEach(function(a){ if (counted(a)) (ids[a.catId] || ids[cats[0].id]).push(a); });
+  var dropped = {}, rows = [], E = 0, P = 0;
+  cats.forEach(function(c){
+    var k = keptItems(ids[c.id], c), e = 0, p = 0;
+    k.dropped.forEach(function(a){ dropped[a.id] = true; });
+    k.kept.forEach(function(a){ e += scoreOf(a); p += num(a.possible) || 0; });
+    rows.push({ cat:c, E:e, P:p, pct: p > 0 ? e / p * 100 : null, n: k.kept.length });
+    E += e; P += p;
+  });
+  var pct = null;
+  if (cls.method === 'points') pct = P > 0 ? E / P * 100 : null;
+  else {
+    var sw = 0, acc = 0;
+    rows.forEach(function(r){ if (r.pct == null) return; var w = +r.cat.weight || 0; sw += w; acc += w * r.pct; });
+    pct = sw > 0 ? acc / sw : null;
+  }
+  return { pct:pct, rows:rows, dropped:dropped };
+}
+function pctWith(cls, extra){ return compute(Object.assign({}, cls, { assignments: cls.assignments.concat([extra]) })).pct; }
+function needFor(cls, scale, catId, possible, band){
+  var cut = effCut(+band.min, scale.rounding);
+  var test = function(s){ var p = pctWith(cls, { id:'_sim', catId:catId, earned:s, possible:possible, status:'graded' }); return p != null && p >= cut - 1e-9; };
+  if (test(0)) return 0;
+  var lim = Math.max(possible, 1) * 10;
+  if (!test(lim)) return Infinity;
+  var lo = 0, hi = lim;
+  for (var i = 0; i < 50; i++) { var m = (lo + hi) / 2; if (test(m)) hi = m; else lo = m; }
+  return Math.ceil(hi * 100 - 1e-6) / 100;
+}
+
+/* ---------- state ---------- */
+var KEY = 'gradecast:v1';
+function sampleClasses(){
+  function C(name, teacher, level, method, cats, items){
+    var cs = cats.map(function(c){ return { id: uid(), name: c[0], weight: c[1], drop: c[2] || 0 }; });
+    return { id: uid(), name:name, teacher:teacher, level:level, method:method, categories: cs,
+      assignments: items.map(function(t){ return { id: uid(), name: t[0], catId: cs[t[1]].id, earned: t[2], possible: t[3], date: t[4], status: t[5] || 'graded' }; }) };
+  }
+  return [
+    C('AP Biology','Ms. Reyes','ap','weighted',[['Tests',50],['Labs',30],['Homework',20,1]],[
+      ['HW 1.1',2,10,10,'2026-09-05'],['HW 1.2',2,9,10,'2026-09-09'],
+      ['Unit 1 Test: Chemistry of Life',0,88,100,'2026-09-12'],['Enzyme Lab',1,18,20,'2026-09-18'],
+      ['HW 2.1',2,10,10,'2026-09-22'],['Unit 2 Test: Cells',0,94,100,'2026-10-03'],['Osmosis Lab',1,20,20,'2026-10-08'],
+      ['HW 2.2',2,null,10,'2026-10-10','missing'],['HW 3.1',2,8,10,'2026-10-17'],['Photosynthesis Lab',1,17,20,'2026-10-21'],
+      ['Unit 3 Test: Energy',0,85,100,'2026-10-24'],['HW 3.2',2,10,10,'2026-10-28']
+    ]),
+    C('Algebra II Honors','Mr. Okafor','honors','weighted',[['Tests',60],['Quizzes',25],['Homework',15]],[
+      ['HW Set 1',2,20,20,'2026-09-04'],['Quiz 1.1',1,18,20,'2026-09-08'],['Quiz 1.2',1,16,20,'2026-09-15'],['HW Set 2',2,18,20,'2026-09-18'],
+      ['Unit 1 Test',0,82,100,'2026-09-25'],['Quiz 2.1',1,19,20,'2026-10-06'],['HW Set 3',2,20,20,'2026-10-09'],
+      ['Quiz 2.2',1,14,20,'2026-10-16'],['Unit 2 Test',0,91,100,'2026-10-23'],['HW Set 4',2,15,20,'2026-10-30']
+    ]),
+    C('English 11','Mrs. Lindqvist','regular','points',[['Essays',0],['Reading',0],['Participation',0]],[
+      ['Summer reading quiz',1,45,50,'2026-09-03'],['Personal narrative',0,88,100,'2026-09-19'],['Vocab 1',1,19,20,'2026-09-24'],
+      ['Gatsby ch. 1–3 quiz',1,18,25,'2026-10-02'],['Socratic seminar',2,30,30,'2026-10-09'],['Vocab 2',1,17,20,'2026-10-15'],
+      ['Rhetorical analysis essay',0,92,100,'2026-10-27']
+    ]),
+    C('US History','Mr. Haddad','regular','weighted',[['Assessments',70],['Classwork',30]],[
+      ['Primary source notes',1,10,10,'2026-09-08'],['Unit 1 Test',0,72,100,'2026-09-17'],['Map activity',1,9,10,'2026-09-22'],
+      ['Debate prep',1,8,10,'2026-10-01'],['DBQ: Colonial economies',0,36,50,'2026-10-07'],['Reading check',1,10,10,'2026-10-14'],
+      ['Unit 2 Test',0,79,100,'2026-10-22'],['Timeline project',1,7,10,'2026-10-29']
+    ])
+  ];
+}
+function freshState(withExamples){
+  var scale = Object.assign({ id: 's_' + uid() }, clone(PRESETS.draft));
+  return { v:2, onboarded: !!withExamples, example: !!withExamples, defaultScaleId: scale.id, scales:[scale], gpa:{ honors:0.5, ap:1.0 }, classes: withExamples ? sampleClasses() : [] };
+}
+function valid(s){ return s && Array.isArray(s.classes) && Array.isArray(s.scales) && s.scales.length > 0; }
+function normalize(s){
+  if (!s.gpa) s.gpa = { honors:0.5, ap:1.0 };
+  if (s.onboarded === undefined) s.onboarded = !!(s.example || s.classes.length);
+  if (!s.scales.some(function(x){ return x.id === s.defaultScaleId; })) s.defaultScaleId = s.scales[0].id;
+  s.classes.forEach(function(c){ c.categories = c.categories || []; c.assignments = c.assignments || []; c.method = c.method || 'weighted'; c.level = c.level || 'regular'; });
+  return s;
+}
+function load(){
+  try { var raw = localStorage.getItem(KEY); if (raw) { var s = JSON.parse(raw); if (valid(s)) return normalize(s); } } catch (e) {}
+  return freshState(false);
+}
+var saveOk = true;
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); saveOk = true; } catch (e) { saveOk = false; } }
+var state = load();
+var ui = { sim:{}, view:null, classId:null, shownPct:{}, heroNote:'', simLetter:null, zoneKey:null, homeIntro:true };
+
+function scale(){ return state.scales.find(function(s){ return s.id === state.defaultScaleId; }) || state.scales[0]; }
+function getClass(id){ return state.classes.find(function(c){ return c.id === id; }); }
+function gpaSummary(){
+  var uw = 0, w = 0, n = 0, sc = scale();
+  state.classes.forEach(function(c){
+    var p = compute(c).pct; if (p == null) return;
+    var g = +letterOf(p, sc).gpa || 0;
+    var boost = g > 0 ? (c.level === 'ap' ? +state.gpa.ap || 0 : c.level === 'honors' ? +state.gpa.honors || 0 : 0) : 0;
+    uw += g; w += g + boost; n++;
+  });
+  return n ? { uw: uw / n, w: w / n, n:n } : null;
+}
+
+/* ---------- pieces ---------- */
+function ringSm(pct, band, delay){
+  var r = 16, C = 2 * Math.PI * r, f = pct == null ? 0 : Math.max(0, Math.min(100, pct)) / 100;
+  return '<span class="ring ring-sm" style="' + gstyle(band && band.letter) + '"><svg viewBox="0 0 40 40" aria-hidden="true"><circle class="trk" cx="20" cy="20" r="' + r + '" stroke-width="4"/>' +
+    '<circle class="prg' + (delay != null ? ' intro' : '') + '" cx="20" cy="20" r="' + r + '" stroke-width="4" stroke-dasharray="' + C.toFixed(2) + '" stroke-dashoffset="' + (C * (1 - f)).toFixed(2) + '" style="--c:' + C.toFixed(2) + ';--d:' + (delay || 0) + 's"/></svg>' +
+    '<span class="ltr">' + esc(band ? band.letter : '–') + '</span></span>';
+}
+function ringLg(pct, band, from){
+  var r = 88, C = 2 * Math.PI * r, shown = pct == null ? 0 : from;
+  var f = Math.max(0, Math.min(100, shown)) / 100, fa = pct == null ? 0 : Math.max(0, Math.min(100, pct)) / 100;
+  var th = 2 * Math.PI * fa, gx = (100 + r * Math.cos(th)).toFixed(2), gy = (100 + r * Math.sin(th)).toFixed(2);
+  return '<div class="ring ring-lg" id="hero-ring" data-c="' + C.toFixed(3) + '" style="' + gstyle(band && band.letter) + '" role="img" aria-label="' + (pct == null ? 'No grade yet' : fmt(pct) + ' percent, ' + esc(band.letter)) + '">' +
+    '<svg viewBox="0 0 200 200" aria-hidden="true"><circle class="trk" cx="100" cy="100" r="' + r + '" stroke-width="18"/>' +
+    '<circle class="prg" id="hero-prg" cx="100" cy="100" r="' + r + '" stroke-width="18" stroke-dasharray="' + C.toFixed(2) + '" stroke-dashoffset="' + (C * (1 - f)).toFixed(2) + '"/>' +
+    '<circle class="ghost" cx="' + gx + '" cy="' + gy + '" r="4.5"/></svg>' +
+    '<div class="inner"><span class="pct">' + (pct == null ? '—' : '<span id="hero-num">' + fmt(shown) + '</span><small>%</small>') + '</span><span class="ltr" id="hero-ltr">' + esc(band ? band.letter : 'No grades yet') + '</span></div></div>';
+}
+function setNav(left, title, right){
+  $('#navbar-in').innerHTML = '<div>' + (left || '') + '</div><span class="nav-title">' + esc(title || '') + '</span><div>' + (right || '') + '</div>';
+}
+
+/* ---------- views ---------- */
+function renderWelcome(){
+  setNav('<button class="bar-btn" data-act="go" data-to="preferences" aria-label="Settings">' + GEAR + '</button>', '', '');
+  var top = bandsDesc(scale())[0];
+  $('#main').innerHTML = '<div class="welcome">' + '<div class="ring ring-lg" style="width:120px;height:120px;' + gstyle('A') + '"><svg viewBox="0 0 200 200" aria-hidden="true"><circle class="trk" cx="100" cy="100" r="80" stroke-width="22"/><circle class="prg intro" cx="100" cy="100" r="80" stroke-width="22" stroke-dasharray="502.65" stroke-dashoffset="50" style="--c:502.65"/></svg><div class="inner"><span class="ltr" style="font-size:30px;font-weight:700">A</span></div></div>' +
+    '<h1 class="large-title">Gradecast</h1><p class="tag">See your grade, and what your next test will do to it.</p>' +
+    '<div class="sec"><div class="group">' +
+    '<button class="row" data-act="bb-setup"><span class="row-main"><span class="row-title" style="color:var(--tint);font-weight:600">Import From Blackbaud</span><span class="row-sub">Brings in your classes, weights and scores</span></span>' + CHEV + '</button>' +
+    '<button class="row" data-act="class-new"><span class="row-main"><span class="row-title" style="color:var(--tint)">Add Classes Myself</span><span class="row-sub">Type in your classes and scores</span></span>' + CHEV + '</button>' +
+    '<button class="row" data-act="try-examples"><span class="row-main"><span class="row-title" style="color:var(--tint)">Look Around First</span><span class="row-sub">Try it with example classes</span></span>' + CHEV + '</button>' +
+    '</div><p class="sec-f">Letter grades use your school’s scale' + (top ? ' (an A starts at ' + pts(+top.min) + '%)' : '') + '. <button class="bar-btn" style="min-height:0;font-size:13px;padding:0" data-act="go" data-to="preferences">Change it</button></p></div></div>';
+}
+function renderHome(){
+  if (!state.onboarded && !state.classes.length) { renderWelcome(); return; }
+  setNav('<button class="bar-btn" data-act="go" data-to="preferences" aria-label="Settings">' + GEAR + '</button>', 'Grades',
+    '<button class="bar-btn" data-act="class-new" aria-label="Add class">' + PLUS + '</button>');
+  var sc = scale(), g = gpaSummary();
+  var h = '<h1 class="large-title">Grades</h1>';
+  if (g) h += '<p class="subtitle num">GPA ' + fmt(g.w, 2) + ' weighted · ' + fmt(g.uw, 2) + ' unweighted</p>';
+  if (!state.classes.length) {
+    h += '<div class="sec"><div class="group empty"><p>Add a class to see your grade and what your next test will do to it.</p><button class="bar-btn strong" data-act="class-new">Add Class</button></div></div>';
+  } else {
+    var intro = ui.homeIntro; ui.homeIntro = false;
+    h += '<div class="sec"><div class="group" style="--inset:68px">' + state.classes.map(function(c, i){
+      var p = compute(c).pct, b = letterOf(p, sc);
+      return '<a class="row" href="#class-' + c.id + '">' + ringSm(p, b, intro ? i * 0.07 : null) +
+        '<span class="row-main"><span class="row-title">' + esc(c.name) + '</span>' + (c.teacher ? '<span class="row-sub">' + esc(c.teacher) + '</span>' : '') + '</span>' +
+        '<span class="row-val strong"' + (intro && p != null ? ' data-count="' + p + '" data-delay="' + (i * 70) + '"' : '') + '>' + (p == null ? '—' : fmt(p) + '%') + '</span>' + CHEV + '</a>';
+    }).join('') + '</div></div>';
+  }
+  if (state.example) h += '<div class="notice"><span>These are example classes.</span><span style="display:flex;gap:18px"><button data-act="bb-setup">Import From Blackbaud</button><button data-act="clear-examples">Clear</button></span></div>';
+  else if (state.bb) h += '<div class="notice"><span>Updated ' + esc(fmtStamp(state.bb.lastSync)) + '</span><button data-act="bb-import">Update</button></div>';
+  $('#main').innerHTML = h;
+  $$('[data-count]').forEach(function(el){ var to = +el.getAttribute('data-count'); el.textContent = fmt(0) + '%'; setTimeout(function(){ animateNumber(el, 0, to, 800, '%'); }, +el.getAttribute('data-delay')); });
+}
+
+function simFor(cls){
+  var s = ui.sim[cls.id];
+  if (!s) {
+    var guess = cls.categories.find(function(c){ return /test|exam|assess|summative/i.test(c.name); }) || cls.categories[0];
+    s = ui.sim[cls.id] = { catId: guess ? guess.id : null, possible:100, score:90 };
+  }
+  if (cls.categories.length && !cls.categories.some(function(c){ return c.id === s.catId; })) s.catId = cls.categories[0].id;
+  return s;
+}
+
+function renderClass(id){
+  var cls = getClass(id); if (!cls) { go('home'); return; }
+  setNav('<a class="bar-btn" href="#home">' + BACK + '<span style="margin-left:4px">Grades</span></a>', cls.name, '<button class="bar-btn" data-act="class-edit">Edit</button>');
+  var sc = scale(), r = compute(cls), b = letterOf(r.pct, sc), sim = simFor(cls);
+  pv.on = false; pv.down = false; clearTimeout(pv.timer); ui.zoneKey = null;
+  var from = ui.shownPct[id] != null ? ui.shownPct[id] : 0;
+  var note = '';
+  if (r.pct != null) {
+    var st = standing(r.pct, sc), bits = [];
+    if (st.toUp != null) bits.push(fmt(st.toUp) + '% to ' + esc(st.up.letter));
+    if (st.cushion != null) bits.push(fmt(st.cushion) + '% above ' + esc(st.band.letter));
+    note = bits.join(' · ');
+  }
+  var h = '<h1 class="large-title">' + esc(cls.name) + '</h1>' + (cls.teacher ? '<p class="subtitle">' + esc(cls.teacher) + '</p>' : '');
+  ui.heroNote = note;
+  var rep = num(cls.reported), diff = (rep != null && r.pct != null && Math.abs(rep - r.pct) > 0.1) ? '<p class="bb-diff num">Blackbaud shows ' + fmt(rep) + '%. If that’s right, check the category weights in Edit.</p>' : '';
+  h += '<div class="hero">' + ringLg(r.pct, b, from) + '<p class="hero-note num" id="hero-note">' + note + '</p>' + diff + '</div>';
+
+  // what if
+  var weighted = cls.method !== 'points';
+  h += '<div class="sec"><h2 class="sec-h">What If</h2><div class="group">';
+  if (cls.categories.length > 1 && weighted) h += '<div class="row"><label class="row-label" for="sim-cat">Category</label><select class="inline" id="sim-cat">' +
+    cls.categories.map(function(c){ return '<option value="' + c.id + '"' + (c.id === sim.catId ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select></div>';
+  h += '<div class="row"><label class="row-label" for="sim-pos">Worth</label><input class="inline num" id="sim-pos" type="number" inputmode="decimal" min="0" step="any" value="' + pts(sim.possible) + '" style="width:3.2em"><span class="row-val">points</span></div>';
+  h += '<div class="wi"><div class="wi-score"><label for="sim-score">You Score</label><span class="val"><input id="sim-score" type="number" inputmode="decimal" min="0" step="any" value="' + pts(sim.score) + '"><span class="of">/ <span id="sim-pos-echo">' + pts(sim.possible) + '</span></span></span></div>' +
+    '<div class="track-wrap"><div class="zones" id="zones" aria-hidden="true"></div><div class="zones fillz" id="zones-fill" aria-hidden="true"></div>' +
+    '<input id="sim-range" class="slider" type="range" min="0" max="' + sim.possible + '" step="' + (sim.possible > 40 ? 1 : 0.5) + '" value="' + Math.min(sim.score, sim.possible) + '" aria-label="Score"></div>' +
+    '<div class="zone-labels" id="zone-labels" aria-hidden="true"></div>' +
+    '<div id="sim-out"></div></div></div></div>';
+
+  // categories
+  if (weighted && cls.categories.length) {
+    h += '<div class="sec"><h2 class="sec-h">Categories</h2><div class="group">' + r.rows.map(function(row){
+      var lb = letterOf(row.pct, sc);
+      return '<div class="row cat-item" data-cat="' + row.cat.id + '" style="' + gstyle(lb && lb.letter) + '"><div style="display:flex;align-items:center;gap:12px"><span class="row-main"><span class="row-title">' + esc(row.cat.name) + '</span><span class="row-sub">' + pts(+row.cat.weight) + '% of grade</span></span>' +
+        '<span class="row-val strong num"><span class="tc cat-pct">' + (row.pct == null ? '—' : fmt(row.pct, 1) + '%') + '</span></span></div>' +
+        '<div class="catbar"><i data-w="' + (row.pct == null ? 0 : Math.max(0, Math.min(100, row.pct))) + '"></i></div></div>';
+    }).join('') + '</div></div>';
+  }
+
+  // assignments
+  var catName = {}; cls.categories.forEach(function(c){ catName[c.id] = c.name; });
+  var list = cls.assignments.map(function(a, i){ return { a:a, i:i }; }).sort(function(x, y){ var dx = x.a.date || '', dy = y.a.date || ''; return dx > dy ? -1 : dx < dy ? 1 : y.i - x.i; });
+  h += '<div class="sec"><h2 class="sec-h">Assignments</h2><div class="group">';
+  h += list.map(function(x){
+    var a = x.a, P = num(a.possible), E = num(a.earned);
+    var pct = a.status === 'missing' ? 0 : (E != null && P > 0 ? E / P * 100 : null);
+    var lb = (a.status === 'graded' || a.status === 'missing') ? letterOf(pct, sc) : null;
+    var sub = [];
+    if (a.status === 'missing') sub.push('<span style="color:var(--danger)">Missing</span>');
+    else if (a.status === 'excused') sub.push('Excused');
+    else if (a.status === 'pending') sub.push('Not graded');
+    if (r.dropped[a.id]) sub.push('Dropped');
+    if (weighted && catName[a.catId]) sub.push(esc(catName[a.catId]));
+    if (a.date) sub.push(fmtDate(a.date));
+    var val = (a.status === 'graded' || a.status === 'missing') ? (a.status === 'missing' ? '0' : pts(E)) + '/' + pts(P) : '—';
+    return '<button class="row' + (r.dropped[a.id] ? ' strike' : '') + '" data-act="as-edit" data-id="' + a.id + '"><span class="row-main"><span class="row-title">' + esc(a.name || 'Untitled') + '</span><span class="row-sub">' + sub.join(' · ') + '</span></span>' +
+      '<span style="display:grid;justify-items:end;gap:1px"><span class="row-val strong num">' + val + '</span>' + (lb && pct != null ? '<span class="row-sub num" style="' + gstyle(lb.letter) + '"><span class="tc">' + fmt(pct, 0) + '%</span></span>' : '') + '</span></button>';
+  }).join('');
+  h += '<button class="row link" data-act="as-new">Add Assignment</button><button class="row link" data-act="as-paste">Paste from StudentVue</button></div></div>';
+  $('#main').innerHTML = h;
+  ui.simLetter = null;
+  refreshSim();
+  ui.shownPct[id] = r.pct;
+  if (r.pct != null && from !== r.pct) {
+    $('#hero-ring').getBoundingClientRect();
+    requestAnimationFrame(function(){ setHero(r.pct, b, { count:true, from:from }); });
+  }
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ $$('.catbar i').forEach(function(el){ el.style.width = el.getAttribute('data-w') + '%'; }); }); });
+}
+
+function refreshSim(){
+  var cls = getClass(ui.classId); if (!cls) return;
+  var sc = scale(), sim = simFor(cls), P = sim.possible, base = compute(cls).pct;
+  var range = $('#sim-range'), out = $('#sim-out');
+  $('#sim-pos-echo').textContent = pts(P);
+  if (!(P > 0)) { out.innerHTML = '<p class="wi-need">Enter how many points it’s worth.</p>'; $('#zones').innerHTML = $('#zones-fill').innerHTML = $('#zone-labels').innerHTML = ''; ui.zoneKey = null; return; }
+  var np = pctWith(cls, { id:'_sim', catId: sim.catId, earned: sim.score, possible: P, status:'graded' });
+  var nb = letterOf(np, sc), d = base == null ? null : np - base;
+  range.max = P; range.step = P > 40 ? 1 : 0.5; range.value = Math.min(sim.score, P);
+  var zk = sim.catId + '|' + P; if (ui.zoneKey !== zk) { renderZones(cls, sc, sim); ui.zoneKey = zk; }
+  $('#zones-fill').style.setProperty('--clip', (100 - Math.min(sim.score, P) / P * 100) + '%');
+  var deltaTxt = d == null ? 'First grade in this class' : (Math.abs(d) < 0.005 ? 'No change' : (d > 0 ? '+' : '−') + fmt(Math.abs(d)) + '% from now');
+  var need = [];
+  if (base != null) {
+    var st = standing(base, sc);
+    if (st.up) {
+      var su = needFor(cls, sc, sim.catId, P, st.up);
+      need.push(su <= P ? '<span>Get <b>' + pts(su) + '/' + pts(P) + '</b> or more to reach ' + esc(st.up.letter) + '.</span>' : '<span>' + esc(st.up.letter) + ' isn’t reachable on this one.</span>');
+    }
+    if (st.band && +st.band.min > 0) {
+      var sk = needFor(cls, sc, sim.catId, P, st.band);
+      need.push(sk === 0 ? '<span>Your ' + esc(st.band.letter) + ' is safe even with a 0.</span>' : '<span>Get <b>' + pts(sk) + '/' + pts(P) + '</b> to keep your ' + esc(st.band.letter) + '.</span>');
+    }
+  }
+  out.innerHTML = '<div class="wi-result"><span>New Grade</span><div><div class="wi-new" style="' + gstyle(nb && nb.letter) + '"><span class="p">' + fmt(np) + '%</span><span class="l">' + esc(nb ? nb.letter : '') + '</span></div>' +
+    '<div class="wi-delta">' + deltaTxt + '</div></div></div>' + (need.length ? '<div class="wi-need">' + need.join('') + '</div>' : '');
+  var nl = nb ? nb.letter : '';
+  if (ui.simLetter != null && ui.simLetter !== nl) pop($('.wi-new .l'));
+  ui.simLetter = nl;
+  if (pv.on) {
+    if (pv.letter != null && pv.letter !== nl) { try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) {} }
+    pv.letter = nl;
+    setHero(np, nb);
+    setNote('If you get ' + pts(sim.score) + '/' + pts(P) + ' · ' + deltaTxt);
+    setCats(compute(Object.assign({}, cls, { assignments: cls.assignments.concat([{ id:'_sim', catId: sim.catId, earned: sim.score, possible: P, status:'graded' }]) })));
+  }
+}
+
+/* ---------- live visuals ---------- */
+function reduced(){ return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+function pop(el){ if (!el || reduced()) return; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+function animateNumber(el, from, to, dur, suffix){
+  suffix = suffix || '';
+  if (!el) return;
+  cancelAnimationFrame(el._raf);
+  if (reduced() || from == null || !isFinite(from)) { el.textContent = fmt(to) + suffix; return; }
+  var t0 = performance.now();
+  (function step(t){ var k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(from + (to - from) * e) + suffix; if (k < 1) el._raf = requestAnimationFrame(step); })(t0);
+}
+function setHero(pct, band, opts){
+  opts = opts || {};
+  var ring = $('#hero-ring'); if (!ring || pct == null) return;
+  var C = +ring.getAttribute('data-c'), f = Math.max(0, Math.min(100, pct)) / 100;
+  ring.setAttribute('style', gstyle(band && band.letter));
+  $('#hero-prg').style.strokeDashoffset = (C * (1 - f)).toFixed(2);
+  var n = $('#hero-num');
+  if (opts.count) animateNumber(n, opts.from, pct, 900); else if (n) { cancelAnimationFrame(n._raf); n.textContent = fmt(pct); }
+  var l = $('#hero-ltr'), nl = band ? band.letter : '';
+  if (l && l.textContent !== nl) { l.textContent = nl; pop(l); }
+}
+function setNote(txt){
+  var el = $('#hero-note'); if (!el) return;
+  if (txt) { el.textContent = txt; el.classList.add('preview'); } else { el.textContent = ui.heroNote; el.classList.remove('preview'); }
+}
+function setCats(res){
+  var sc = scale();
+  res.rows.forEach(function(row){
+    var el = $('.cat-item[data-cat="' + row.cat.id + '"]'); if (!el) return;
+    var lb = letterOf(row.pct, sc);
+    el.setAttribute('style', gstyle(lb && lb.letter));
+    $('.cat-pct', el).textContent = row.pct == null ? '—' : fmt(row.pct, 1) + '%';
+    $('.catbar i', el).style.width = (row.pct == null ? 0 : Math.max(0, Math.min(100, row.pct))) + '%';
+  });
+}
+function renderZones(cls, sc, sim){
+  var P = sim.possible, N = 120, runs = [], cur = null;
+  for (var i = 0; i <= N; i++) {
+    var b = letterOf(pctWith(cls, { id:'_sim', catId: sim.catId, earned: P * i / N, possible: P, status:'graded' }), sc);
+    if (!cur || b !== cur.band) { if (cur) cur.to = i / N; cur = { band:b, from: i / N, to:1 }; runs.push(cur); }
+  }
+  runs = runs.filter(function(x){ return x.to - x.from > 0.0001; });
+  var bars = runs.map(function(x){ var k = gkey(x.band && x.band.letter); return '<span style="width:' + ((x.to - x.from) * 100).toFixed(3) + '%;background:' + (k ? 'var(--g-' + k + ')' : 'var(--label3)') + '"></span>'; }).join('');
+  $('#zones').innerHTML = bars; $('#zones-fill').innerHTML = bars;
+  $('#zone-labels').innerHTML = runs.filter(function(x){ return x.to - x.from >= 0.085; }).map(function(x){
+    return '<span style="left:' + ((x.from + x.to) / 2 * 100).toFixed(2) + '%;' + gstyle(x.band && x.band.letter) + '">' + esc(x.band ? x.band.letter : '') + '</span>'; }).join('');
+}
+var pv = { on:false, down:false, timer:null, letter:null };
+function previewPing(){
+  var ring = $('#hero-ring'); if (!ring || !$('#hero-num')) return;
+  if (!pv.on) { pv.on = true; pv.letter = null; ring.classList.add('preview', 'live'); }
+  clearTimeout(pv.timer);
+  if (!pv.down) pv.timer = setTimeout(previewOff, 1500);
+}
+function previewOff(){
+  clearTimeout(pv.timer);
+  if (!pv.on) return;
+  pv.on = false;
+  var ring = $('#hero-ring'), cls = getClass(ui.classId); if (!ring || !cls) return;
+  ring.classList.remove('live', 'preview');
+  var r = compute(cls), n = $('#hero-num');
+  setHero(r.pct, letterOf(r.pct, scale()), { count:true, from: n ? num(n.textContent) : null });
+  setNote(null); setCats(r);
+}
+
+function renderPrefs(){
+  setNav('<a class="bar-btn" href="#home">' + BACK + '<span style="margin-left:4px">Grades</span></a>', 'Settings', '');
+  var s = scale();
+  var h = '<h1 class="large-title">Settings</h1>';
+  h += '<div class="sec"><h2 class="sec-h">Blackbaud</h2><div class="group">' +
+    '<button class="row link" data-act="bb-setup">Connect Blackbaud</button>' +
+    '<button class="row link" data-act="bb-import">Import From Blackbaud</button></div>' +
+    '<p class="sec-f">' + (state.bb ? 'Last updated ' + esc(fmtStamp(state.bb.lastSync)) + (state.bb.term ? ' · ' + esc(state.bb.term) : '') + '.' : 'Bring in your classes, category weights and scores from Blackbaud.') + '</p></div>';
+  h += '<div class="sec"><h2 class="sec-h">Grading Scale</h2><div class="group">' +
+    '<div class="row band-row band-head"><span>Letter</span><span>Minimum %</span><span>GPA</span><span></span></div>' +
+    bandsDesc(s).map(function(b){ var i = s.bands.indexOf(b);
+      return '<div class="row band-row"><span style="display:flex;align-items:center;gap:10px;min-width:0"><span class="dot" style="' + gstyle(b.letter) + '"></span><input class="ltr-in" data-bf="letter" data-i="' + i + '" value="' + esc(b.letter) + '" aria-label="Letter"></span>' +
+        '<input type="number" step="any" inputmode="decimal" data-bf="min" data-i="' + i + '" value="' + b.min + '" aria-label="Minimum percent for ' + esc(b.letter) + '">' +
+        '<input type="number" step="any" inputmode="decimal" data-bf="gpa" data-i="' + i + '" value="' + b.gpa + '" aria-label="GPA points for ' + esc(b.letter) + '">' +
+        '<button class="minus" data-act="band-del" data-i="' + i + '" aria-label="Remove ' + esc(b.letter) + '">−</button></div>'; }).join('') +
+    '<button class="row link" data-act="band-add">Add Letter</button></div>' +
+    '<p class="sec-f">A grade gets the highest letter whose minimum it reaches.</p></div>';
+  h += '<div class="sec"><div class="group">' +
+    '<div class="row"><label class="row-label" for="p-round">Rounding</label><select class="inline" id="p-round">' + Object.keys(ROUNDING).map(function(k){ return '<option value="' + k + '"' + (s.rounding === k ? ' selected' : '') + '>' + ROUNDING[k] + '</option>'; }).join('') + '</select></div>' +
+    '<div class="row"><label class="row-label" for="p-test">Check a Grade</label><input class="inline num" id="p-test" type="number" step="any" inputmode="decimal" value="92.7" style="width:4.5em"><span class="row-val" id="p-test-out" style="min-width:2.2em"></span></div>' +
+    '<div class="row"><label class="row-label" for="p-preset">Use a Preset</label><select class="inline" id="p-preset"><option value="">Choose…</option>' + Object.keys(PRESETS).map(function(k){ return '<option value="' + k + '">' + esc(PRESETS[k].name) + '</option>'; }).join('') + '</select></div>' +
+    '</div><p class="sec-f">Rounding happens before the letter is picked. With whole-number rounding, 89.5 counts as 90.</p></div>';
+  h += '<div class="sec"><h2 class="sec-h">GPA Boost</h2><div class="group">' +
+    '<div class="row"><label class="row-label" for="gpa-h">Honors</label><input class="inline num" id="gpa-h" type="number" step="any" inputmode="decimal" value="' + state.gpa.honors + '" style="width:4em"></div>' +
+    '<div class="row"><label class="row-label" for="gpa-ap">AP / IB</label><input class="inline num" id="gpa-ap" type="number" step="any" inputmode="decimal" value="' + state.gpa.ap + '" style="width:4em"></div>' +
+    '</div><p class="sec-f">Added to a class’s GPA points for your weighted GPA.</p></div>';
+  h += '<div class="sec"><h2 class="sec-h">Backup</h2><div class="group">' +
+    '<button class="row link" data-act="backup-copy" id="backup-btn">Copy Backup Code</button>' +
+    '<button class="row link" data-act="restore-open">Restore From Backup</button></div>' +
+    '<p class="sec-f">' + (saveOk ? 'Your grades are saved in this browser only. Paste the backup code into Notes to keep a copy or move to another device.' : '<span style="color:var(--danger)">This browser isn’t saving your grades. Copy the backup code before you leave.</span>') + '</p><div id="backup-area"></div></div>';
+  h += '<div class="sec"><div class="group">' + (state.example ? '<button class="row link" data-act="clear-examples">Clear Example Classes</button>' : '') +
+    '<button class="row destructive" data-act="reset">Delete All Data</button></div></div>';
+  $('#main').innerHTML = h;
+  updateTest();
+}
+function updateTest(){
+  var v = num($('#p-test').value), b = v == null ? null : letterOf(v, scale());
+  $('#p-test-out').innerHTML = b ? '<span style="' + gstyle(b.letter) + ';font-weight:600"><span class="tc">' + esc(b.letter) + '</span></span>' : '';
+}
+
+/* ---------- sheets & alerts ---------- */
+var sheetReturn = null;
+function openSheet(title, body, opts){
+  opts = opts || {};
+  if (closeT) finishClose(true);
+  var root = $('#sheet'); sheetReturn = document.activeElement;
+  root.innerHTML = '<div class="sheet-backdrop" data-act="sheet-close"></div><div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><span class="grabber" aria-hidden="true"></span>' +
+    '<div class="sheet-bar"><button class="bar-btn" data-act="sheet-close">' + esc(opts.cancel || 'Cancel') + '</button><h2 id="sheet-title">' + esc(title) + '</h2>' +
+    (opts.done ? '<button class="bar-btn strong" id="sheet-done"' + (opts.form ? ' type="submit" form="' + opts.form + '"' : ' type="button"') + '>' + esc(opts.done) + '</button>' : '<span></span>') + '</div>' +
+    '<div class="sheet-body">' + body + '</div></div>';
+  root.hidden = false; document.body.classList.add('locked');
+  if (opts.mount) opts.mount(root);
+  enableSwipe(root);
+  var f = $('input:not([type=radio]),textarea', root); if (f && window.matchMedia('(hover: hover)').matches) f.focus();
+}
+var closeT = null;
+function closeSheet(){
+  var root = $('#sheet'); if (root.hidden) return;
+  if (reduced()) { finishClose(); return; }
+  root.classList.add('closing'); clearTimeout(closeT); closeT = setTimeout(finishClose, 210);
+}
+function finishClose(skipFocus){
+  clearTimeout(closeT); closeT = null;
+  var root = $('#sheet'); root.classList.remove('closing'); root.hidden = true; root.innerHTML = ''; document.body.classList.remove('locked');
+  if (!skipFocus && sheetReturn && sheetReturn.isConnected && sheetReturn.focus) try { sheetReturn.focus({ preventScroll:true }); } catch (e) {}
+}
+function enableSwipe(root){
+  var panel = $('.sheet-panel', root), bar = $('.sheet-bar', root);
+  if (!panel || !bar || !window.matchMedia('(max-width: 600px)').matches) return;
+  var y0 = null, dy = 0, t0 = 0;
+  bar.addEventListener('pointerdown', function(e){ if (e.target.closest('button')) return; y0 = e.clientY; dy = 0; t0 = Date.now(); panel.style.transition = 'none'; panel.style.animation = 'none'; try { bar.setPointerCapture(e.pointerId); } catch (x) {} });
+  bar.addEventListener('pointermove', function(e){ if (y0 == null) return; dy = Math.max(0, e.clientY - y0); panel.style.transform = 'translateY(' + dy + 'px)'; });
+  var end = function(){
+    if (y0 == null) return; y0 = null;
+    var v = dy / Math.max(1, Date.now() - t0);
+    panel.style.transition = 'transform .24s cubic-bezier(.2,.8,.2,1)';
+    if (dy > 110 || (dy > 30 && v > 0.6)) { panel.style.transform = 'translateY(110%)'; root.classList.add('closing'); clearTimeout(closeT); closeT = setTimeout(finishClose, 220); }
+    else panel.style.transform = '';
+  };
+  bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
+}
+function alertBox(title, msg, okLabel, fn){
+  if (closeT) finishClose(true);
+  var root = $('#sheet'); sheetReturn = document.activeElement;
+  root.innerHTML = '<div class="sheet-backdrop" data-act="sheet-close"></div><div class="alert" role="alertdialog" aria-modal="true" aria-labelledby="al-t"><div class="alert-body"><h2 id="al-t">' + esc(title) + '</h2><p>' + esc(msg) + '</p></div>' +
+    '<div class="alert-btns"><button data-act="sheet-close">Cancel</button><button class="destructive" id="al-ok">' + esc(okLabel) + '</button></div></div>';
+  root.hidden = false; document.body.classList.add('locked');
+  $('#al-ok').addEventListener('click', function(){ closeSheet(); fn(); });
+  $('#al-ok').focus();
+}
+
+function catRow(c){
+  return '<div class="row cat-row" data-cid="' + esc(c.id) + '"><input data-cf="name" value="' + esc(c.name) + '" placeholder="Category name" aria-label="Category name">' +
+    '<input class="w num" data-cf="weight" type="number" inputmode="decimal" step="any" value="' + (c.weight === '' || c.weight == null ? '' : c.weight) + '" placeholder="%" aria-label="Weight percent">' +
+    '<button type="button" class="minus" data-act="cat-del" aria-label="Remove category">−</button></div>';
+}
+function openClassSheet(cls){
+  var isNew = !cls;
+  var c = cls || { id:null, name:'', teacher:'', level:'regular', method:'weighted',
+    categories:[{ id:uid(), name:'Tests', weight:50 },{ id:uid(), name:'Quizzes', weight:30 },{ id:uid(), name:'Homework', weight:20 }] };
+  var body = '<form id="class-form" data-method="' + c.method + '" novalidate>' +
+    '<div class="sec"><div class="group">' +
+    '<div class="row"><input class="inline full" id="cf-name" value="' + esc(c.name) + '" placeholder="Class name" autocomplete="off" aria-label="Class name"></div>' +
+    '<div class="row"><input class="inline full" id="cf-teacher" value="' + esc(c.teacher || '') + '" placeholder="Teacher (optional)" autocomplete="off" aria-label="Teacher"></div>' +
+    '</div></div>' +
+    '<div class="sec"><h2 class="sec-h">Level</h2><div class="seg">' + [['regular','Regular'],['honors','Honors'],['ap','AP / IB']].map(function(o){ return '<label><input type="radio" name="cf-level" value="' + o[0] + '"' + (c.level === o[0] ? ' checked' : '') + '>' + o[1] + '</label>'; }).join('') + '</div></div>' +
+    '<div class="sec"><h2 class="sec-h">Graded By</h2><div class="seg">' +
+    '<label><input type="radio" name="cf-method" value="weighted"' + (c.method !== 'points' ? ' checked' : '') + '>Category Weights</label>' +
+    '<label><input type="radio" name="cf-method" value="points"' + (c.method === 'points' ? ' checked' : '') + '>Total Points</label></div>' +
+    '<p class="sec-f" id="cf-help"></p></div>' +
+    '<div class="sec"><h2 class="sec-h">Categories</h2><div class="group" id="cf-cats">' + c.categories.map(catRow).join('') +
+    '<button type="button" class="row link" data-act="cat-add" id="cat-add">Add Category</button></div><p class="sec-f w-only" id="cf-sum"></p></div>' +
+    '<p class="err" id="cf-err" role="alert"></p>' +
+    (isNew ? '' : '<div class="sec"><div class="group"><button type="button" class="row destructive center" data-act="class-del">Delete Class</button></div></div>') + '</form>';
+  openSheet(isNew ? 'New Class' : 'Edit Class', body, { done: isNew ? 'Add' : 'Done', form:'class-form', mount: function(root){
+    var form = $('#class-form', root); form._id = c.id;
+    var upd = function(){
+      var m = form.querySelector('input[name=cf-method]:checked').value; form.setAttribute('data-method', m);
+      $('#cf-help', root).textContent = m === 'points' ? 'Your grade is all points earned divided by all points possible.' : 'Each category is worth a set percent of your grade, like Tests 50%.';
+      var sum = $$('[data-cf=weight]', form).reduce(function(a, i){ return a + (num(i.value) || 0); }, 0);
+      $('#cf-sum', root).innerHTML = 'Weights add up to <span class="num" style="color:' + (Math.abs(sum - 100) < 0.01 ? 'inherit' : 'var(--danger)') + '">' + pts(sum) + '%</span>.';
+    };
+    form.addEventListener('input', upd); form.addEventListener('change', upd); upd();
+    form.addEventListener('submit', function(e){ e.preventDefault(); saveClass(form); });
+  }});
+}
+function saveClass(form){
+  var name = $('#cf-name', form).value.trim();
+  if (!name) { $('#cf-err', form).textContent = 'Give the class a name.'; $('#cf-name', form).focus(); return; }
+  var cats = $$('.cat-row', form).map(function(row){ return { id: row.getAttribute('data-cid'), name: $('[data-cf=name]', row).value.trim() || 'Untitled', weight: num($('[data-cf=weight]', row).value) || 0, drop: 0 }; });
+  if (!cats.length) cats.push({ id: uid(), name:'All Work', weight:100, drop:0 });
+  var data = { name:name, teacher: $('#cf-teacher', form).value.trim(), level: form.querySelector('input[name=cf-level]:checked').value, method: form.querySelector('input[name=cf-method]:checked').value };
+  var id = form._id, c;
+  if (id) {
+    c = getClass(id);
+    cats.forEach(function(nc){ var old = c.categories.find(function(o){ return o.id === nc.id; }); if (old) nc.drop = old.drop || 0; });
+    Object.assign(c, data, { categories: cats });
+  } else { c = Object.assign({ id: uid(), assignments: [], categories: cats }, data); state.classes.push(c); state.onboarded = true; }
+  c.assignments.forEach(function(a){ if (!cats.some(function(x){ return x.id === a.catId; })) a.catId = cats[0].id; });
+  save(); closeSheet(); go('class-' + c.id);
+}
+
+function openAssignmentSheet(a){
+  var cls = getClass(ui.classId), isNew = !a;
+  var lastCat = ui.lastCat && cls.categories.some(function(c){ return c.id === ui.lastCat; }) ? ui.lastCat : (cls.categories[0] && cls.categories[0].id);
+  var v = a || { id:null, name:'', catId:lastCat, earned:'', possible:'', date: todayISO(), status:'graded' };
+  var st = v.status === 'pending' ? 'graded' : v.status;
+  var body = '<form id="as-form" novalidate><div class="sec"><div class="group">' +
+    '<div class="row"><input class="inline full" id="af-name" value="' + esc(v.name) + '" placeholder="Assignment name" autocomplete="off" aria-label="Assignment name"></div>' +
+    '<div class="row"><label class="row-label" for="af-earned">Score</label><input class="inline num" id="af-earned" type="number" inputmode="decimal" step="any" value="' + (num(v.earned) == null ? '' : v.earned) + '" placeholder="45" style="width:5em"></div>' +
+    '<div class="row"><label class="row-label" for="af-possible">Out Of</label><input class="inline num" id="af-possible" type="number" inputmode="decimal" step="any" value="' + (num(v.possible) == null ? '' : v.possible) + '" placeholder="50" style="width:5em"></div>' +
+    (cls.categories.length > 1 ? '<div class="row"><label class="row-label" for="af-cat">Category</label><select class="inline" id="af-cat">' + cls.categories.map(function(c){ return '<option value="' + c.id + '"' + (c.id === v.catId ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select></div>' : '') +
+    '<div class="row"><label class="row-label" for="af-date">Date</label><input class="inline" id="af-date" type="date" value="' + esc(v.date || '') + '"></div>' +
+    '</div></div><div class="sec"><div class="seg">' + [['graded','Graded'],['missing','Missing'],['excused','Excused']].map(function(o){ return '<label><input type="radio" name="af-status" value="' + o[0] + '"' + (st === o[0] ? ' checked' : '') + '>' + o[1] + '</label>'; }).join('') + '</div>' +
+    '<p class="sec-f">Missing counts as a 0. Excused doesn’t count.</p></div><p class="err" id="af-err" role="alert"></p>' +
+    (isNew ? '' : '<div class="sec"><div class="group"><button type="button" class="row destructive center" data-act="as-del">Delete Assignment</button></div></div>') + '</form>';
+  openSheet(isNew ? 'New Assignment' : 'Assignment', body, { done: isNew ? 'Add' : 'Done', form:'as-form', mount: function(root){
+    var form = $('#as-form', root); form._id = v.id;
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var status = form.querySelector('input[name=af-status]:checked').value;
+      var data = { name: $('#af-name', form).value.trim() || 'Untitled', earned: num($('#af-earned', form).value), possible: num($('#af-possible', form).value),
+        date: $('#af-date', form).value, catId: $('#af-cat', form) ? $('#af-cat', form).value : (cls.categories[0] && cls.categories[0].id), status: status };
+      if (data.possible == null && status !== 'excused') { $('#af-err', form).textContent = 'Enter how many points it’s out of.'; $('#af-possible', form).focus(); return; }
+      if (status === 'graded' && data.earned == null) { $('#af-err', form).textContent = 'Enter your score.'; $('#af-earned', form).focus(); return; }
+      ui.lastCat = data.catId;
+      if (form._id) Object.assign(cls.assignments.find(function(q){ return q.id === form._id; }), data);
+      else cls.assignments.push(Object.assign({ id: uid() }, data));
+      save(); closeSheet(); renderClass(ui.classId);
+    });
+  }});
+}
+
+/* ---------- StudentVue paste ---------- */
+var DATE_RE = /\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/;
+function parsePaste(text, cls){
+  var out = [], cats = cls.categories.slice().sort(function(a, b){ return b.name.length - a.name.length; });
+  String(text || '').split(/\r?\n/).forEach(function(raw){
+    var line = raw.trim(); if (!line) return;
+    var date = '', dm = line.match(DATE_RE);
+    if (dm) { var y = +dm[3]; if (y < 100) y += 2000; date = y + '-' + String(dm[1]).padStart(2, '0') + '-' + String(dm[2]).padStart(2, '0'); line = line.replace(DATE_RE, ' '); }
+    var re = /(-?\d+(?:\.\d+)?)\s*(?:\/|out of)\s*(\d+(?:\.\d+)?)/gi, m, last = null;
+    while ((m = re.exec(line))) last = m;
+    var status = 'graded', earned = null, possible = null;
+    if (/\bmissing\b/i.test(line)) status = 'missing';
+    else if (/\b(excused|exempt)\b/i.test(line)) status = 'excused';
+    else if (/not graded|ungraded/i.test(line)) status = 'pending';
+    if (last) { earned = +last[1]; possible = +last[2]; }
+    else {
+      var pm = line.match(/(?:^|\s)(?:\/|out of)\s*(\d+(?:\.\d+)?)/i) || line.match(/(\d+(?:\.\d+)?)\s*(?:pts|points)?\s*possible/i);
+      if (pm) possible = +pm[1];
+      if (possible == null || status === 'graded') return;
+    }
+    if (status === 'missing') earned = 0;
+    var lower = line.toLowerCase(), cat = null;
+    for (var i = 0; i < cats.length; i++) if (lower.indexOf(cats[i].name.toLowerCase()) >= 0) { cat = cats[i]; break; }
+    if (!cat) {
+      var guesses = [[/test|exam|assessment|summative/, /test|exam|assess|summative/], [/quiz/, /quiz/], [/lab/, /lab/], [/hw|homework/, /homework|hw/], [/essay|paper/, /essay|writing|paper/], [/project/, /project/]];
+      for (var g = 0; g < guesses.length && !cat; g++) if (guesses[g][0].test(lower)) cat = cls.categories.find(function(c){ return guesses[g][1].test(c.name.toLowerCase()); }) || null;
+    }
+    if (!cat) cat = cls.categories[0] || null;
+    var cells = line.split(/\t+|\s{2,}/).map(function(s){ return s.trim(); }).filter(Boolean);
+    var name = cells.find(function(s){ return /[a-z]/i.test(s) && !/^(\d|\/|out of|missing|excused|graded|not graded|points?|raw score|percent)/i.test(s) && !(cat && s.toLowerCase() === cat.name.toLowerCase()); });
+    if (!name) name = line.replace(last ? last[0] : '', ' ').replace(/\s+/g, ' ').trim();
+    out.push({ name: (name || 'Untitled').replace(/\s+/g, ' ').slice(0, 80), earned: earned, possible: possible, date: date, catId: cat ? cat.id : null, status: status });
+  });
+  return out;
+}
+function openPasteSheet(){
+  var cls = getClass(ui.classId), parsed = [];
+  var body = '<div class="sec"><textarea class="paste" id="paste-in" placeholder="Copy your assignment list from StudentVue and paste it here." aria-label="Pasted assignments"></textarea>' +
+    '<p class="sec-f">Each line needs a score, like 45/50. Lines marked Missing count as 0.</p></div><div id="paste-prev"></div>';
+  openSheet('Paste Assignments', body, { done:'Add', mount: function(root){
+    var ta = $('#paste-in', root), btn = $('#sheet-done', root), names = {};
+    cls.categories.forEach(function(c){ names[c.id] = c.name; });
+    btn.disabled = true;
+    ta.addEventListener('input', function(){
+      parsed = parsePaste(ta.value, cls); btn.disabled = !parsed.length;
+      $('#paste-prev', root).innerHTML = parsed.length ? '<div class="sec"><h2 class="sec-h">' + parsed.length + ' Found</h2><div class="group">' + parsed.map(function(p){
+        return '<div class="row"><span class="row-main"><span class="row-title">' + esc(p.name) + '</span><span class="row-sub">' + [esc(names[p.catId] || ''), fmtDate(p.date)].filter(Boolean).join(' · ') + '</span></span><span class="row-val strong num">' +
+          (p.status === 'missing' ? 'Missing' : p.status === 'excused' ? 'Excused' : p.status === 'pending' ? 'Not graded' : pts(p.earned) + '/' + pts(p.possible)) + '</span></div>'; }).join('') + '</div></div>'
+        : (ta.value.trim() ? '<p class="err">No scores found yet. Each line needs something like 45/50.</p>' : '');
+    });
+    btn.addEventListener('click', function(){
+      if (!parsed.length) return;
+      parsed.forEach(function(p){ cls.assignments.push(Object.assign({ id: uid() }, p)); });
+      save(); closeSheet(); renderClass(ui.classId);
+    });
+  }});
+}
+
+/* ---------- Blackbaud sync ---------- */
+/* Runs on the student's own logged-in Blackbaud site (as a bookmark), reads the same gradebook
+   data the Blackbaud web app loads, and offers it to copy into Gradecast. Must stay self-contained. */
+function gradecastBlackbaudSync(){
+  var old = document.getElementById('gc-sync'); if (old) old.remove();
+  var box = document.createElement('div'); box.id = 'gc-sync';
+  box.setAttribute('style', 'position:fixed;z-index:2147483647;left:50%;top:24px;transform:translateX(-50%);width:min(420px,calc(100% - 32px));background:#fff;color:#000;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);padding:18px 18px 16px;font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-align:left');
+  var APP = '__GRADECAST_URL__';
+  var head = '<div style="font-weight:600;font-size:17px;margin-bottom:6px">Gradecast Sync</div>';
+  box.innerHTML = head + '<div id="gc-msg">Reading your grades…</div>';
+  document.body.appendChild(box);
+  var msg = function(t){ var m = document.getElementById('gc-msg'); if (m) m.textContent = t; };
+  var get = function(path){ return fetch(path, { credentials:'include', headers:{ 'Accept':'application/json' } }).then(function(r){ if (!r.ok) throw new Error('Blackbaud answered ' + r.status); return r.json(); }); };
+  var q = function(o){ return Object.keys(o).map(function(k){ return k + '=' + encodeURIComponent(o[k]); }).join('&'); };
+  var strip = function(h){ var d = document.createElement('div'); d.innerHTML = String(h == null ? '' : h); return (d.textContent || '').replace(/\s+/g, ' ').trim(); };
+  var num = function(v){ if (v === null || v === undefined || v === '') return null; var n = parseFloat(String(v).replace(/[^0-9.\-]/g, '')); return isFinite(n) ? n : null; };
+  var isoDate = function(s){ var m = String(s || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? m[3] + '-' + ('0' + m[1]).slice(-2) + '-' + ('0' + m[2]).slice(-2) : ''; };
+  var now = new Date(), y = now.getFullYear(), yr = now.getMonth() < 6 ? (y - 1) + ' - ' + y : y + ' - ' + (y + 1);
+  var uid, term;
+  get('/api/webapp/context').then(function(ctx){
+    uid = ctx && ctx.UserInfo && ctx.UserInfo.UserId;
+    if (!uid) throw new Error('You don’t look logged in');
+    return get('/api/DataDirect/StudentGroupTermList/?' + q({ studentUserId:uid, schoolYearLabel:yr, personaId:2 }));
+  }).then(function(terms){
+    terms = (terms || []).filter(function(t){ return t.OfferingType == 1; });
+    term = terms.filter(function(t){ return t.CurrentInd; })[0] || terms[terms.length - 1];
+    if (!term) throw new Error('No classes found for ' + yr);
+    return get('/api/datadirect/ParentStudentUserAcademicGroupsGet?' + q({ userId:uid, schoolYearLabel:yr, memberLevel:3, persona:2, durationList:term.DurationId, markingPeriodId:'' }));
+  }).then(function(groups){
+    groups = groups || [];
+    var needMp = groups.some(function(g){ return !g.markingperiodid; });
+    var mpReq = needMp ? get('/api/gradebook/GradeBookMyDayMarkingPeriods?' + q({ durationSectionList: JSON.stringify([{ DurationId: term.DurationId, LeadSectionList: groups.map(function(g){ return { LeadSectionId: g.leadsectionid || g.sectionid }; }) }]), userId:uid, personaId:2 })).catch(function(){ return []; }) : Promise.resolve([]);
+    return mpReq.then(function(mps){
+      var mpFor = function(g){
+        if (g.markingperiodid) return g.markingperiodid;
+        var c = (mps || []).filter(function(m){ return m.SectionId == g.leadsectionid || m.SectionId == g.sectionid; });
+        var cur = c.filter(function(m){ return m.CurrentMarkingPeriod; })[0] || c[c.length - 1];
+        return cur && cur.MarkingPeriodId;
+      };
+      var done = 0;
+      return Promise.all(groups.map(function(g){
+        var mp = mpFor(g);
+        if (!mp) return Promise.resolve({ g:g, list:[] });
+        return get('/api/datadirect/GradeBookPerformanceAssignmentStudentList/?' + q({ sectionId:g.sectionid, markingPeriodId:mp, studentUserId:uid, personaId:2 }))
+          .then(function(list){ msg('Reading class ' + (++done) + ' of ' + groups.length + '…'); return { g:g, list: list || [] }; })
+          .catch(function(){ return { g:g, list:[] }; });
+      }));
+    });
+  }).then(function(res){
+    var classes = res.map(function(r){
+      var g = r.g, list = r.list, cats = {}, order = [];
+      list.forEach(function(a){ var id = String(a.AssignmentTypeId); if (!cats[id]) { cats[id] = { id:'bb' + id, name: strip(a.AssignmentType) || 'Other', weight: num(a.Weight) }; order.push(id); } });
+      var weighted = list.length > 0 && list[0].Weight !== null && list[0].Weight !== undefined;
+      var cl = order.map(function(id){ return cats[id]; });
+      var sum = cl.reduce(function(t, c){ return t + (c.weight || 0); }, 0);
+      if (weighted && sum > 0 && sum <= 1.5) cl.forEach(function(c){ c.weight = Math.round((c.weight || 0) * 10000) / 100; });
+      return { id:'bb' + g.sectionid, name: strip(g.sectionidentifier || g.coursedescription), teacher: strip(g.groupownername), reported: num(g.cumgrade), method: weighted ? 'weighted' : 'points', categories: cl,
+        assignments: list.map(function(a){
+          var pts = num(a.Points), status = num(a.ExemptTotal) > 0 ? 'excused' : (pts === null ? (num(a.MissingTotal) > 0 ? 'missing' : 'pending') : 'graded');
+          return { id:'bb' + (a.AssignmentIndexId || a.AssignmentId), name: strip(a.AssignmentShortDescription || a.Assignment) || 'Assignment', catId:'bb' + a.AssignmentTypeId,
+            earned: status === 'missing' ? 0 : pts, possible: num(a.MaxPoints), date: isoDate(a.DateDue || a.DateAssigned), status: status };
+        }) };
+    }).filter(function(c){ return c.name; });
+    var payload = 'GRADECAST:' + JSON.stringify({ source:'blackbaud', v:1, school: location.hostname, term: term ? strip(term.DurationDescription) : '', fetched: new Date().toISOString(), classes: classes });
+    var n = classes.reduce(function(t, c){ return t + c.assignments.length; }, 0);
+    box.innerHTML = head + '<div>Found ' + classes.length + ' classes and ' + n + ' assignments' + (term ? ' for ' + strip(term.DurationDescription) : '') + '.</div>' +
+      '<button id="gc-go" style="margin-top:14px;width:100%;padding:13px;border:0;border-radius:10px;background:#0062D6;color:#fff;font:600 17px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer">Send to Gradecast</button>' +
+      '<div id="gc-note" style="margin-top:10px;font-size:13px;color:#6C6C70">Gradecast opens in a new tab. Paste when it asks.</div>' +
+      '<textarea id="gc-text" readonly style="position:absolute;left:-9999px;top:0;width:10px;height:10px"></textarea>' +
+      '<button id="gc-close" aria-label="Close" style="position:absolute;top:8px;right:10px;border:0;background:none;font-size:24px;line-height:1;color:#6C6C70;cursor:pointer">×</button>';
+    var ta = document.getElementById('gc-text'); ta.value = payload;
+    var copyNow = function(){
+      var ok = false;
+      try { ta.focus(); ta.select(); ta.setSelectionRange(0, payload.length); ok = document.execCommand('copy'); } catch (e) {}
+      try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(payload).catch(function(){}); } catch (e) {}
+      return ok;
+    };
+    try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(payload).catch(function(){}); } catch (e) {}
+    document.getElementById('gc-close').onclick = function(){ box.remove(); };
+    document.getElementById('gc-go').onclick = function(){
+      copyNow();
+      window.open(APP + '#import', '_blank');
+      this.textContent = 'Copied. Paste in Gradecast'; this.style.background = '#1D7A33';
+      document.getElementById('gc-note').textContent = 'If Gradecast didn’t open, open it yourself and tap Import From Blackbaud.';
+    };
+  }).catch(function(e){
+    msg('Couldn’t read your grades (' + ((e && e.message) || e) + '). Log in to your school’s Blackbaud site, open your Progress page, and try again.');
+    var c = document.createElement('button'); c.textContent = 'Close'; c.onclick = function(){ box.remove(); };
+    c.setAttribute('style', 'margin-top:12px;padding:8px 14px;border:0;border-radius:8px;background:#E5E5EA;color:#000;cursor:pointer;font:inherit');
+    box.appendChild(c);
+  });
+}
+var APP_URL = 'https://claude.ai/artifact/2WFMu8oVbr81w9zPbMLCBX';
+try { if (/^https?:$/.test(location.protocol) && !/claude|anthropic/i.test(location.hostname) && location.hostname) APP_URL = location.href.split('#')[0]; } catch (e) {}
+var BOOKMARKLET = 'javascript:' + encodeURIComponent('(' + gradecastBlackbaudSync.toString().replace('__GRADECAST_URL__', APP_URL) + ')()');
+
+function fmtStamp(iso){
+  var d = new Date(iso); if (isNaN(d)) return 'recently';
+  try { return d.toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ' at ' + d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }); } catch (e) { return d.toDateString(); }
+}
+function parseBB(text){
+  var t = String(text || '').trim(), i = t.indexOf('GRADECAST:');
+  if (i < 0) return null;
+  try { var d = JSON.parse(t.slice(i + 10)); return d && d.source === 'blackbaud' && Array.isArray(d.classes) ? d : null; } catch (e) { return null; }
+}
+function guessLevel(name){ if (/\b(AP|IB)\b/.test(name)) return 'ap'; if (/honou?rs|\bhon\b|\(h\)/i.test(name)) return 'honors'; return 'regular'; }
+function bbClass(inc){
+  var cats = (inc.categories || []).length ? inc.categories.map(function(c){ return { id:c.id, name:c.name, weight: c.weight == null ? 0 : c.weight, drop:0 }; }) : [{ id:'bb_all', name:'All Work', weight:100, drop:0 }];
+  var ids = cats.map(function(c){ return c.id; });
+  var assigns = (inc.assignments || []).map(function(a){ var x = Object.assign({}, a); if (ids.indexOf(x.catId) < 0) x.catId = cats[0].id; return x; });
+  return { cats:cats, assigns:assigns };
+}
+function applyBB(data){
+  if (state.example) { state.classes = []; state.example = false; }
+  data.classes.forEach(function(inc){
+    var b = bbClass(inc), ex = getClass(inc.id);
+    if (ex) {
+      b.cats.forEach(function(c){ var o = ex.categories.find(function(x){ return x.id === c.id; }); if (o) c.drop = o.drop || 0; });
+      var ids = b.cats.map(function(c){ return c.id; });
+      var manual = ex.assignments.filter(function(a){ return String(a.id).indexOf('bb') !== 0; });
+      manual.forEach(function(a){ if (ids.indexOf(a.catId) < 0) a.catId = b.cats[0].id; });
+      Object.assign(ex, { teacher: inc.teacher || ex.teacher, method: inc.method, categories: b.cats, assignments: b.assigns.concat(manual), reported: inc.reported });
+    } else {
+      state.classes.push({ id: inc.id, name: inc.name, teacher: inc.teacher || '', level: guessLevel(inc.name), method: inc.method, categories: b.cats, assignments: b.assigns, reported: inc.reported });
+    }
+  });
+  state.onboarded = true;
+  state.bb = { school: data.school || '', term: data.term || '', lastSync: data.fetched || new Date().toISOString() };
+  ui.shownPct = {}; ui.sim = {};
+  save();
+}
+function openBBSetup(){
+  var phone = window.matchMedia('(hover: none)').matches;
+  var comp = '<div class="sec"><h2 class="sec-h">On a Computer</h2><div class="group"><ol class="steps">' +
+    '<li>Show your bookmarks bar if it’s hidden: press ⌘⇧B on Mac or Ctrl+Shift+B on Windows.</li>' +
+    '<li>Drag this button up onto the bookmarks bar:<br><a class="bm" href="' + esc(BOOKMARKLET) + '" data-act="bm-click" draggable="true">Gradecast Sync</a></li>' +
+    '<li>Log in to your school’s Blackbaud site and click <b>Gradecast Sync</b> in the bookmarks bar.</li>' +
+    '<li>Click <b>Send to Gradecast</b>. Gradecast opens; press ⌘V (Ctrl+V on Windows). Done.</li></ol></div></div>';
+  var ios = '<div class="sec"><h2 class="sec-h">On iPhone (Safari)</h2><div class="group"><ol class="steps">' +
+    '<li>Tap <b>Copy Sync Code</b> below.</li>' +
+    '<li>In Safari, open any page, tap the Share button, then <b>Add Bookmark</b>, and save it.</li>' +
+    '<li>Tap the Bookmarks button, then <b>Edit</b>, and tap the bookmark you just made. Rename it <b>Gradecast Sync</b>, clear its address, paste the code, and tap Done.</li>' +
+    '<li>Log in to Blackbaud in Safari. Tap the address bar, type <b>Gradecast</b>, and tap <b>Gradecast Sync</b> in the list.</li>' +
+    '<li>Tap <b>Send to Gradecast</b>. When Gradecast opens, tap the box and choose <b>Paste</b>.</li></ol></div></div>';
+  var body = '<p class="lead">Gradecast reads your grades straight from Blackbaud using a bookmark called <b>Gradecast Sync</b>. You set it up once. It never sees your password; it only works inside Blackbaud while you’re logged in.</p>' +
+    (phone ? ios + comp : comp + ios) +
+    '<div class="sec"><div class="group"><button class="row link" data-act="bm-copy" id="bm-copy">Copy Sync Code</button><button class="row link" data-act="bb-import">I Already Have It: Import Now</button></div>' +
+    '<p class="sec-f">After setup, updating takes three taps: Gradecast Sync, Send to Gradecast, Paste. Your grades are saved on this device, in this browser.</p><div id="bm-area"></div></div>';
+  openSheet('Connect Blackbaud', body, { cancel:'Close' });
+}
+function bbProgressUrl(){ var h = state.bb && state.bb.school; return h && /^[a-z0-9.-]+$/i.test(h) && h !== 'localhost' ? 'https://' + h + '/app/student#studentmyday/progress' : ''; }
+function openBBImport(prefill){
+  var data = null, done = false, link = bbProgressUrl();
+  var body = (link ? '<div class="sec"><div class="group"><a class="row link" href="' + esc(link) + '" target="_blank" rel="noopener">Open Blackbaud' + '<span class="row-val" style="margin-left:auto;font-size:15px">then tap Gradecast Sync</span></a></div></div>' : '') +
+    '<div class="sec"><textarea class="paste" id="bb-in" placeholder="Paste here. Gradecast imports as soon as you paste." aria-label="Blackbaud data"></textarea>' +
+    '<p class="sec-f">On Blackbaud, tap <b>Gradecast Sync</b>, then <b>Send to Gradecast</b>. <button class="bar-btn" style="min-height:0;font-size:13px;padding:0" data-act="bb-setup">First time? Set it up</button></p></div><div id="bb-prev"></div>';
+  openSheet('Import From Blackbaud', body, { done:'Import', mount: function(root){
+    var ta = $('#bb-in', root), btn = $('#sheet-done', root); btn.disabled = true;
+    var finish = function(){
+      if (done || !data) return; done = true;
+      applyBB(data);
+      var n = data.classes.length, a = data.classes.reduce(function(t, c){ return t + (c.assignments || []).length; }, 0);
+      $('.sheet-body', root).innerHTML = '<div class="empty" style="padding:44px 20px"><span class="ring ring-sm" style="width:64px;height:64px;' + gstyle('A') + '"><svg viewBox="0 0 40 40" aria-hidden="true"><circle class="trk" cx="20" cy="20" r="16" stroke-width="4"/><circle class="prg intro" cx="20" cy="20" r="16" stroke-width="4" stroke-dasharray="100.53" stroke-dashoffset="0" style="--c:100.53"/></svg><svg viewBox="0 0 24 24" style="position:relative;transform:none;width:28px;height:28px;color:var(--t-a)"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>' +
+        '<h2 style="font-size:20px;margin-top:10px">Grades Updated</h2><p>' + n + ' classes and ' + a + ' assignments from Blackbaud.</p></div>';
+      btn.style.visibility = 'hidden'; $('.sheet-bar .bar-btn', root).textContent = 'Done';
+      setTimeout(function(){ if ($('#sheet').contains(root.firstChild)) { closeSheet(); } go('home'); }, 1500);
+    };
+    var check = function(){
+      data = parseBB(ta.value); btn.disabled = !(data && data.classes.length);
+      if (!ta.value.trim()) { $('#bb-prev', root).innerHTML = ''; return; }
+      if (!data) { $('#bb-prev', root).innerHTML = '<p class="err">That isn’t from Gradecast Sync. On Blackbaud, tap Gradecast Sync and Send to Gradecast, then paste here.</p>'; return; }
+      if (!data.classes.length) { $('#bb-prev', root).innerHTML = '<p class="err">Gradecast Sync didn’t find any classes. Open your Progress page on Blackbaud and run it again.</p>'; return; }
+    };
+    ta.addEventListener('input', check);
+    ta.addEventListener('paste', function(){ setTimeout(function(){ check(); finish(); }, 0); });
+    btn.addEventListener('click', function(){ check(); finish(); });
+    if (prefill) { ta.value = prefill; check(); finish(); }
+    else setTimeout(function(){ try { ta.focus({ preventScroll:true }); } catch (e) {} }, 60);
+  }});
+}
+
+/* ---------- routing ---------- */
+function parseHash(){
+  var h = (location.hash || '').replace(/^#/, '');
+  if (h.indexOf('class-') === 0 && getClass(h.slice(6))) return { view:'class', id: h.slice(6) };
+  if (h === 'preferences') return { view:'prefs' };
+  if (h === 'import') return { view:'home', importNow:true };
+  return { view:'home' };
+}
+function render(){
+  var r = parseHash(), changed = r.view !== ui.view || r.id !== ui.classId, prev = ui.view;
+  ui.view = r.view; ui.classId = r.id || null;
+  if (r.view === 'class') renderClass(r.id); else if (r.view === 'prefs') renderPrefs(); else renderHome();
+  if (changed) window.scrollTo(0, 0);
+  if (r.importNow && !ui.importShown) { ui.importShown = true; setTimeout(function(){ openBBImport(); }, 50); }
+  if (changed && prev) { var m = $('#main'); m.classList.remove('view-fwd', 'view-back'); void m.offsetWidth; m.classList.add(r.view === 'home' ? 'view-back' : 'view-fwd'); }
+  onScroll();
+}
+function go(h){ if ((location.hash || '').replace(/^#/, '') === h) render(); else location.hash = h; }
+window.addEventListener('hashchange', render);
+function onScroll(){ $('#navbar').classList.toggle('scrolled', window.scrollY > 40); }
+window.addEventListener('scroll', onScroll, { passive:true });
+
+/* ---------- actions ---------- */
+var actions = {
+  'go': function(el){ go(el.getAttribute('data-to')); },
+  'sheet-close': closeSheet,
+  'class-new': function(){ openClassSheet(null); },
+  'class-edit': function(){ openClassSheet(getClass(ui.classId)); },
+  'class-del': function(){ var c = getClass(ui.classId); alertBox('Delete ' + c.name + '?', 'This deletes the class and its ' + c.assignments.length + ' assignments.', 'Delete', function(){ state.classes = state.classes.filter(function(x){ return x !== c; }); save(); go('home'); }); },
+  'cat-add': function(){ $('#cat-add').insertAdjacentHTML('beforebegin', catRow({ id: uid(), name:'', weight:'' })); var rows = $$('#cf-cats .cat-row'); $('[data-cf=name]', rows[rows.length - 1]).focus(); $('#class-form').dispatchEvent(new Event('input')); },
+  'cat-del': function(el){ if ($$('#cf-cats .cat-row').length <= 1) return; el.closest('.cat-row').remove(); $('#class-form').dispatchEvent(new Event('input')); },
+  'as-new': function(){ openAssignmentSheet(null); },
+  'as-edit': function(el){ var a = getClass(ui.classId).assignments.find(function(x){ return x.id === el.getAttribute('data-id'); }); if (a) openAssignmentSheet(a); },
+  'as-del': function(){ var cls = getClass(ui.classId), id = $('#as-form')._id; cls.assignments = cls.assignments.filter(function(a){ return a.id !== id; }); save(); closeSheet(); renderClass(ui.classId); },
+  'as-paste': openPasteSheet,
+  'try-examples': function(){ state.classes = sampleClasses(); state.example = true; state.onboarded = true; ui.homeIntro = true; save(); render(); },
+  'bb-setup': openBBSetup,
+  'bb-import': openBBImport,
+  'bm-click': function(){ var a = $('#bm-area'); if (a) a.innerHTML = '<p class="sec-f">Don’t click it here. Drag it to your bookmarks bar, then click it while you’re on Blackbaud.</p>'; },
+  'bm-copy': function(){
+    var btn = $('#bm-copy');
+    var fallback = function(){ $('#bm-area').innerHTML = '<div style="margin-top:12px"><textarea class="paste" id="bm-text" readonly aria-label="Sync code">' + esc(BOOKMARKLET) + '</textarea><p class="sec-f">Select all and copy.</p></div>'; var t = $('#bm-text'); t.focus(); t.select(); };
+    try { navigator.clipboard.writeText(BOOKMARKLET).then(function(){ btn.textContent = 'Copied'; setTimeout(function(){ if (btn.isConnected) btn.textContent = 'Copy Sync Code'; }, 1800); }, fallback); } catch (e) { fallback(); }
+  },
+  'clear-examples': function(){ alertBox('Clear Example Classes?', 'Your grading scale stays.', 'Clear', function(){ state.classes = []; state.example = false; state.onboarded = false; save(); render(); }); },
+  'band-add': function(){ scale().bands.push({ letter:'?', min:0, gpa:0 }); save(); renderPrefs(); },
+  'band-del': function(el){ var s = scale(); if (s.bands.length <= 1) return; s.bands.splice(+el.getAttribute('data-i'), 1); save(); renderPrefs(); },
+  'backup-copy': function(){
+    var code = JSON.stringify(state), btn = $('#backup-btn');
+    var fallback = function(){ $('#backup-area').innerHTML = '<div style="margin-top:12px"><textarea class="paste" id="backup-text" readonly aria-label="Backup code">' + esc(code) + '</textarea><p class="sec-f">Select all and copy.</p></div>'; var t = $('#backup-text'); t.focus(); t.select(); };
+    try { navigator.clipboard.writeText(code).then(function(){ btn.textContent = 'Copied'; setTimeout(function(){ if (btn.isConnected) btn.textContent = 'Copy Backup Code'; }, 1800); }, fallback); } catch (e) { fallback(); }
+  },
+  'restore-open': function(){
+    openSheet('Restore', '<div class="sec"><textarea class="paste" id="restore-text" placeholder="Paste your backup code." aria-label="Backup code"></textarea><p class="sec-f">This replaces the classes on this device.</p></div><p class="err" id="restore-err" role="alert"></p>', { done:'Restore', mount: function(root){
+      $('#sheet-done', root).addEventListener('click', function(){
+        var s; try { s = JSON.parse($('#restore-text').value); } catch (e) { $('#restore-err').textContent = 'That isn’t a backup code. Paste the whole thing.'; return; }
+        if (!valid(s)) { $('#restore-err').textContent = 'That backup is missing its classes or scale.'; return; }
+        state = normalize(s); save(); closeSheet(); go('home');
+      });
+    }});
+  },
+  'reset': function(){ alertBox('Delete All Data?', 'Every class and assignment on this device will be deleted.', 'Delete', function(){ state = freshState(false); save(); go('home'); }); }
+};
+document.addEventListener('click', function(e){
+  var el = e.target.closest('[data-act]'); if (!el) return;
+  var fn = actions[el.getAttribute('data-act')]; if (!fn) return;
+  e.preventDefault(); fn(el, e);
+});
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
+document.addEventListener('paste', function(e){
+  var t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+  var text = (e.clipboardData || window.clipboardData).getData('text'); if (!parseBB(text)) return;
+  e.preventDefault(); openBBImport(text);
+});
+document.addEventListener('pointerdown', function(e){ if (e.target.id === 'sim-range') { pv.down = true; previewPing(); refreshSim(); } });
+function endDrag(){ if (pv.down) { pv.down = false; previewPing(); } }
+document.addEventListener('pointerup', endDrag);
+document.addEventListener('pointercancel', endDrag);
+
+document.addEventListener('input', function(e){
+  var t = e.target;
+  if (ui.view === 'class') {
+    var cls = getClass(ui.classId); if (!cls) return; var sim = simFor(cls);
+    if (/^sim-(range|score|pos)$/.test(t.id)) previewPing();
+    if (t.id === 'sim-range') { sim.score = +t.value; $('#sim-score').value = pts(sim.score); refreshSim(); }
+    else if (t.id === 'sim-score') { var v = num(t.value); if (v != null && v >= 0) { sim.score = v; refreshSim(); } }
+    else if (t.id === 'sim-pos') { var p = num(t.value); if (p != null && p >= 0) { var ratio = sim.possible > 0 ? sim.score / sim.possible : .9; sim.possible = p; sim.score = Math.round(p * ratio * 100) / 100; $('#sim-score').value = pts(sim.score); refreshSim(); } }
+    return;
+  }
+  if (ui.view === 'prefs') {
+    if (t.id === 'p-test') { updateTest(); return; }
+    if (t.hasAttribute('data-bf')) {
+      var b = scale().bands[+t.getAttribute('data-i')], f = t.getAttribute('data-bf');
+      if (f === 'letter') { b.letter = t.value; var d = t.parentNode.querySelector('.dot'); if (d) d.setAttribute('style', gstyle(t.value)); }
+      else { var n = num(t.value); if (n != null) b[f] = n; }
+      save(); updateTest(); return;
+    }
+    if (t.id === 'gpa-h' && num(t.value) != null) { state.gpa.honors = num(t.value); save(); }
+    if (t.id === 'gpa-ap' && num(t.value) != null) { state.gpa.ap = num(t.value); save(); }
+  }
+});
+document.addEventListener('change', function(e){
+  var t = e.target;
+  if (ui.view === 'class' && t.id === 'sim-cat') { simFor(getClass(ui.classId)).catId = t.value; previewPing(); refreshSim(); return; }
+  if (ui.view === 'prefs') {
+    if (t.id === 'p-round') { scale().rounding = t.value; save(); updateTest(); return; }
+    if (t.getAttribute('data-bf') === 'min') { renderPrefs(); return; }
+    if (t.id === 'p-preset' && t.value) {
+      var k = t.value; t.value = '';
+      alertBox('Replace Grading Scale?', 'Your letter cutoffs will be replaced with ' + PRESETS[k].name + '.', 'Replace', function(){
+        var s = scale(); s.bands = clone(PRESETS[k].bands); s.rounding = PRESETS[k].rounding; save(); renderPrefs();
+      });
+    }
+  }
+});
+
+window.__gradecast = { bookmarklet: function(){ return BOOKMARKLET; }, parseBB: parseBB, compute: compute, letterOf: letterOf, needFor: needFor, parsePaste: parsePaste, effCut: effCut, PRESETS: PRESETS, state: function(){ return state; } };
+render();
+})();
+</script>
+</body>
+</html>
