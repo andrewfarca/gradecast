@@ -198,6 +198,13 @@ textarea.paste{display:block;width:100%;min-height:150px;border:0;background:var
 .alert-btns button+button{border-left:.5px solid var(--sep)}
 .alert-btns .destructive{color:var(--danger);font-weight:600}
 
+/* category chips */
+.chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.chips button{border:0;border-radius:999px;padding:6px 12px;font-size:15px;background:var(--fill);color:var(--label)}
+.chips button[aria-pressed="true"]{background:var(--tint);color:#fff;font-weight:600}
+.sec-h.split{display:flex;justify-content:space-between;gap:8px}
+.sec-h .gpct{text-transform:none;font-weight:600;color:var(--tc,var(--label2))}
+.mini-sel{border:0;background:var(--fill);border-radius:8px;padding:3px 6px;font-size:13px;color:var(--tint);max-width:9em}
 /* screenshots */
 .pick{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;padding:26px 16px;border-radius:12px;background:var(--cell);border:1.5px dashed var(--label3);color:var(--tint);font-weight:600;font-size:17px;cursor:pointer;text-align:center}
 .pick small{color:var(--label2);font-weight:400;font-size:13px}
@@ -519,8 +526,8 @@ function renderClass(id){
   // what if
   var weighted = cls.method !== 'points';
   h += '<div class="sec"><h2 class="sec-h">What If</h2><div class="group">';
-  if (cls.categories.length > 1 && weighted) h += '<div class="row"><label class="row-label" for="sim-cat">Category</label><select class="inline" id="sim-cat">' +
-    cls.categories.map(function(c){ return '<option value="' + c.id + '"' + (c.id === sim.catId ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select></div>';
+  if (cls.categories.length > 1 && weighted) h += '<div class="row"><span class="row-label">Goes In</span><div class="chips" role="group" aria-label="Category">' +
+    cls.categories.map(function(c){ return '<button data-act="sim-cat" data-id="' + c.id + '" aria-pressed="' + (c.id === sim.catId) + '">' + esc(c.name) + '</button>'; }).join('') + '</div></div>';
   h += '<div class="row"><label class="row-label" for="sim-pos">Worth</label><input class="inline num" id="sim-pos" type="number" inputmode="decimal" min="0" step="any" value="' + pts(sim.possible) + '" style="width:3.2em"><span class="row-val">points</span></div>';
   h += '<div class="wi"><div class="wi-score"><label for="sim-score">You Score</label><span class="val"><input id="sim-score" type="number" inputmode="decimal" min="0" step="any" value="' + pts(sim.score) + '"><span class="of">/ <span id="sim-pos-echo">' + pts(sim.possible) + '</span></span></span></div>' +
     '<div class="track-wrap"><div class="zones" id="zones" aria-hidden="true"></div><div class="zones fillz" id="zones-fill" aria-hidden="true"></div>' +
@@ -528,36 +535,26 @@ function renderClass(id){
     '<div class="zone-labels" id="zone-labels" aria-hidden="true"></div>' +
     '<div id="sim-out"></div></div></div></div>';
 
-  // categories
-  if (weighted && cls.categories.length) {
-    h += '<div class="sec"><h2 class="sec-h">Categories</h2><div class="group">' + r.rows.map(function(row){
-      var lb = letterOf(row.pct, sc);
-      return '<div class="row cat-item" data-cat="' + row.cat.id + '" style="' + gstyle(lb && lb.letter) + '"><div style="display:flex;align-items:center;gap:12px"><span class="row-main"><span class="row-title">' + esc(row.cat.name) + '</span><span class="row-sub">' + pts(+row.cat.weight) + '% of grade</span></span>' +
-        '<span class="row-val strong num"><span class="tc cat-pct">' + (row.pct == null ? '—' : fmt(row.pct, 1) + '%') + '</span></span></div>' +
-        '<div class="catbar"><i data-w="' + (row.pct == null ? 0 : Math.max(0, Math.min(100, row.pct))) + '"></i></div></div>';
-    }).join('') + '</div></div>';
-  }
-
-  // assignments
-  var catName = {}; cls.categories.forEach(function(c){ catName[c.id] = c.name; });
+  // assignments, grouped by category
   var list = cls.assignments.map(function(a, i){ return { a:a, i:i }; }).sort(function(x, y){ var dx = x.a.date || '', dy = y.a.date || ''; return dx > dy ? -1 : dx < dy ? 1 : y.i - x.i; });
-  h += '<div class="sec"><h2 class="sec-h">Assignments</h2><div class="group">';
-  h += list.map(function(x){
-    var a = x.a, P = num(a.possible), E = num(a.earned);
+  var rowHtml = function(a){
+    var P = num(a.possible), E = num(a.earned);
     var pct = a.status === 'missing' ? 0 : (E != null && P > 0 ? E / P * 100 : null);
-    var lb = (a.status === 'graded' || a.status === 'missing') ? letterOf(pct, sc) : null;
-    var sub = [];
-    if (a.status === 'missing') sub.push('<span style="color:var(--danger)">Missing</span>');
-    else if (a.status === 'excused') sub.push('Excused');
-    else if (a.status === 'pending') sub.push('Not graded');
+    var lb = (a.status === 'graded' || a.status === 'missing') ? letterOf(pct, sc) : null, sub = [];
+    if (a.status === 'missing') sub.push('<span style="color:var(--danger)">Missing</span>'); else if (a.status === 'excused') sub.push('Excused'); else if (a.status === 'pending') sub.push('Not graded');
     if (r.dropped[a.id]) sub.push('Dropped');
-    if (weighted && catName[a.catId]) sub.push(esc(catName[a.catId]));
     if (a.date) sub.push(fmtDate(a.date));
     var val = (a.status === 'graded' || a.status === 'missing') ? (a.status === 'missing' ? '0' : pts(E)) + '/' + pts(P) : '—';
-    return '<button class="row' + (r.dropped[a.id] ? ' strike' : '') + '" data-act="as-edit" data-id="' + a.id + '"><span class="row-main"><span class="row-title">' + esc(a.name || 'Untitled') + '</span><span class="row-sub">' + sub.join(' · ') + '</span></span>' +
+    return '<button class="row' + (r.dropped[a.id] ? ' strike' : '') + '" data-act="as-edit" data-id="' + a.id + '"><span class="row-main"><span class="row-title">' + esc(a.name || 'Untitled') + '</span>' + (sub.length ? '<span class="row-sub">' + sub.join(' · ') + '</span>' : '') + '</span>' +
       '<span style="display:grid;justify-items:end;gap:1px"><span class="row-val strong num">' + val + '</span>' + (lb && pct != null ? '<span class="row-sub num" style="' + gstyle(lb.letter) + '"><span class="tc">' + fmt(pct, 0) + '%</span></span>' : '') + '</span></button>';
-  }).join('');
-  h += '<button class="row link" data-act="as-new">Add Assignment</button><button class="row link" data-act="shot-add">Add From Screenshot</button></div></div>';
+  };
+  var groups = (weighted && cls.categories.length) ? r.rows.map(function(row){ return { cat: row.cat, row: row, items: list.filter(function(x){ return x.a.catId === row.cat.id || (row.cat === r.rows[0].cat && !cls.categories.some(function(c){ return c.id === x.a.catId; })); }) }; }) : [{ cat: null, items: list }];
+  groups.forEach(function(g){
+    var lb = g.row ? letterOf(g.row.pct, sc) : null;
+    h += '<div class="sec">' + (g.cat ? '<h2 class="sec-h split cat-item" data-cat="' + g.cat.id + '" style="' + gstyle(lb && lb.letter) + '"><span>' + esc(g.cat.name) + ' · ' + pts(+g.cat.weight) + '%</span><span class="gpct num cat-pct tc">' + (g.row.pct == null ? '—' : fmt(g.row.pct, 1) + '%') + '</span></h2>' : '<h2 class="sec-h">Assignments</h2>') +
+      '<div class="group">' + (g.items.length ? g.items.map(function(x){ return rowHtml(x.a); }).join('') : '<div class="row"><span class="row-sub">Nothing here yet</span></div>') + '</div></div>';
+  });
+  h += '<div class="sec"><div class="group"><button class="row link" data-act="as-new">Add Assignment</button><button class="row link" data-act="shot-add">Add From Screenshot</button></div></div>';
   $('#main').innerHTML = h;
   ui.simLetter = null;
   refreshSim();
@@ -639,8 +636,8 @@ function setCats(res){
     var el = $('.cat-item[data-cat="' + row.cat.id + '"]'); if (!el) return;
     var lb = letterOf(row.pct, sc);
     el.setAttribute('style', gstyle(lb && lb.letter));
-    $('.cat-pct', el).textContent = row.pct == null ? '—' : fmt(row.pct, 1) + '%';
-    $('.catbar i', el).style.width = (row.pct == null ? 0 : Math.max(0, Math.min(100, row.pct))) + '%';
+    var cp = $('.cat-pct', el) || (el.classList.contains('cat-pct') ? el : null); if (cp) cp.textContent = row.pct == null ? '—' : fmt(row.pct, 1) + '%';
+    var bar = $('.catbar i', el); if (bar) bar.style.width = (row.pct == null ? 0 : Math.max(0, Math.min(100, row.pct))) + '%';
   });
 }
 function renderZones(cls, sc, sim){
@@ -1017,7 +1014,7 @@ function parseShotText(text, cls, className){
       }
     }
     if (!catName && cats.length) { var lower = r.line.toLowerCase(); var hit = cats.slice().sort(function(a, b){ return b.name.length - a.name.length; }).find(function(c){ return lower.indexOf(c.name.toLowerCase()) >= 0; }); if (hit) catName = hit.name; }
-    if (!catName) catName = guessCatName(r.line);
+    if (!catName) catName = (cats.length ? cats[0].name : 'Assignments');
     var ex = cats.length ? findCat(catName) : null; if (ex) catName = ex.name;
     name = name.replace(SHOT_DROP, ' ').replace(/\s+/g, ' ').trim();
     name = name.replace(/\b(\w+)( \1\b)+/gi, '$1').replace(/^[^a-z0-9]+|[^a-z0-9)?!]+$/gi, '').trim();
@@ -1038,20 +1035,34 @@ function openShotSheet(cls){
   openSheet(isNew ? 'New Class' : 'Add From Screenshot', body, { done:'Add', mount: function(root){
     var btn = $('#sheet-done', root); btn.disabled = true;
     var status = $('#sh-status', root), prev = $('#sh-prev', root);
+    var catList = cls ? cls.categories.map(function(c){ return c.name; }) : [];
+    var syncCats = function(){ items.forEach(function(it){ if (catList.indexOf(it.catName) < 0) catList.push(it.catName); }); };
     var draw = function(){
       if (!items.length) { prev.innerHTML = ''; btn.disabled = true; return; }
-      var cats = []; items.forEach(function(it){ if (cats.indexOf(it.catName) < 0) cats.push(it.catName); });
-      var h = '<div class="sec"><h2 class="sec-h">' + items.length + ' Found</h2><div class="group">' + items.map(function(it, i){
-        return '<div class="row"><span class="row-main"><span class="row-title">' + esc(it.name) + '</span><span class="row-sub">' + esc(it.catName || '') + (it.date ? ' · ' + fmtDate(it.date) : '') + '</span></span>' +
+      syncCats();
+      var used = catList.filter(function(c){ return items.some(function(it){ return it.catName === c; }) || (cls && cls.categories.some(function(x){ return x.name === c; })); });
+      catList = used;
+      var opts = function(sel){ return catList.map(function(c){ return '<option' + (c === sel ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join(''); };
+      var h = '<div class="sec"><h2 class="sec-h">Categories</h2><div class="group">' + catList.map(function(c, ci){
+        var n = items.filter(function(it){ return it.catName === c; }).length;
+        return '<div class="row cat-row" style="grid-template-columns:minmax(0,1fr) auto 72px 32px"><input class="sh-cname" data-ci="' + ci + '" value="' + esc(c) + '" aria-label="Category name"><span class="row-sub">' + n + '</span>' +
+          '<input class="w num sh-w" data-ci="' + ci + '" type="number" inputmode="decimal" placeholder="%" value="' + (weights[c] != null ? weights[c] : (cls ? ((cls.categories.find(function(x){ return x.name === c; }) || {}).weight || '') : '')) + '" aria-label="Weight for ' + esc(c) + '">' +
+          (catList.length > 1 ? '<button class="minus sh-cdel" data-ci="' + ci + '" aria-label="Remove ' + esc(c) + '">−</button>' : '<span></span>') + '</div>'; }).join('') +
+        '</div><p class="sec-f">Fix these to match your class, like Doing 60 and Knowing 40. Removing one moves its assignments into the first category. Leave weights blank for total points.</p></div>';
+      h += '<div class="sec"><h2 class="sec-h">' + items.length + ' Assignments</h2><div class="group">' + items.map(function(it, i){
+        return '<div class="row"><span class="row-main"><span class="row-title">' + esc(it.name) + '</span><span class="row-sub"><select class="mini-sel sh-icat" data-i="' + i + '" aria-label="Category for ' + esc(it.name) + '">' + opts(it.catName) + '</select>' + (it.date ? ' · ' + fmtDate(it.date) : '') + '</span></span>' +
           '<span class="row-val strong num">' + (it.status === 'missing' ? 'Missing' : it.status === 'excused' ? 'Excused' : pts(it.earned) + '/' + pts(it.possible)) + '</span><button class="minus" data-i="' + i + '" aria-label="Remove ' + esc(it.name) + '">−</button></div>'; }).join('') +
-        '</div><p class="sec-f">Tap − to drop anything it misread. You can fix scores later by tapping them.</p></div>';
-      if (isNew) h += '<div class="sec"><h2 class="sec-h">Category Weights (Optional)</h2><div class="group">' + cats.map(function(c){
-        return '<div class="row"><label class="row-label" for="w-' + esc(c) + '">' + esc(c) + '</label><input class="inline num sh-w" id="w-' + esc(c) + '" data-cat="' + esc(c) + '" type="number" inputmode="decimal" placeholder="%" value="' + (weights[c] != null ? weights[c] : '') + '" style="width:4em"></div>'; }).join('') +
-        '</div><p class="sec-f">' + cats.length + (cats.length === 1 ? ' category' : ' categories') + ' found. Put in each one’s weight, or leave them blank if your class uses total points.</p></div>';
-      else { var newCats = cats.filter(function(c){ return !cls.categories.some(function(x){ return x.name.toLowerCase() === String(c).toLowerCase(); }); }); if (newCats.length) h += '<p class="sec-f">New ' + (newCats.length === 1 ? 'category' : 'categories') + ': ' + newCats.map(esc).join(', ') + '. Set ' + (newCats.length === 1 ? 'its weight' : 'their weights') + ' in Edit after adding.</p>'; }
+        '</div><p class="sec-f">Tap a category under an assignment to move it. Tap − to drop anything misread.</p></div>';
       prev.innerHTML = h; btn.disabled = false;
     };
-    prev.addEventListener('click', function(e){ var m = e.target.closest('.minus'); if (!m) return; items.splice(+m.getAttribute('data-i'), 1); draw(); });
+    prev.addEventListener('change', function(e){
+      var t = e.target;
+      if (t.classList.contains('sh-icat')) { items[+t.getAttribute('data-i')].catName = t.value; draw(); }
+      if (t.classList.contains('sh-cname')) { var old = catList[+t.getAttribute('data-ci')], nw = t.value.trim() || old; items.forEach(function(it){ if (it.catName === old) it.catName = nw; }); if (weights[old] != null) { weights[nw] = weights[old]; } catList[+t.getAttribute('data-ci')] = nw; draw(); }
+    });
+    prev.addEventListener('input', function(e){ var t = e.target; if (t.classList.contains('sh-w')) { var c = catList[+t.getAttribute('data-ci')]; var v = num(t.value); if (v == null) delete weights[c]; else weights[c] = v; } });
+    prev.addEventListener('click', function(e){ var d = e.target.closest('.sh-cdel'); if (!d) return; e.stopPropagation(); var c = catList[+d.getAttribute('data-ci')], keep = catList.find(function(x){ return x !== c; }); items.forEach(function(it){ if (it.catName === c) it.catName = keep; }); catList = catList.filter(function(x){ return x !== c; }); delete weights[c]; draw(); }, true);
+    prev.addEventListener('click', function(e){ var m = e.target.closest('.minus:not(.sh-cdel)'); if (!m) return; items.splice(+m.getAttribute('data-i'), 1); draw(); });
     $('#sh-file', root).addEventListener('change', function(e){
       var files = Array.prototype.slice.call(e.target.files || []); if (!files.length) return;
       $('#sh-err', root).textContent = '';
@@ -1060,6 +1071,7 @@ function openShotSheet(cls){
         .then(function(text){
           status.innerHTML = '';
           var found = parseShotText(text, cls, isNew ? ($('#sh-name', root).value || '') : ''), keys = {};
+          if (cls) found.forEach(function(f){ var ex = cls.categories.find(function(c){ return c.name.toLowerCase() === String(f.catName).toLowerCase(); }); if (!ex && cls.categories.length === 1) f.catName = cls.categories[0].name; });
           Object.keys(found.weights || {}).forEach(function(k){ weights[k] = found.weights[k]; });
           items.concat(cls ? cls.assignments : []).forEach(function(a){ keys[String(a.name).toLowerCase() + '|' + a.possible] = 1; });
           found.forEach(function(f){ if (!keys[f.name.toLowerCase() + '|' + f.possible]) items.push(f); });
@@ -1073,14 +1085,15 @@ function openShotSheet(cls){
       if (isNew) {
         var name = $('#sh-name', root).value.trim();
         if (!name) { $('#sh-err', root).textContent = 'Give the class a name.'; $('#sh-name', root).focus(); return; }
-        var ws = $$('.sh-w', root), anyW = ws.some(function(i){ return num(i.value) != null; });
-        var cats = ws.map(function(i){ return { id: uid(), name: i.getAttribute('data-cat'), weight: num(i.value) || 0, drop: 0 }; });
+        var anyW = catList.some(function(c){ return weights[c] != null; });
+        var cats = catList.map(function(c){ return { id: uid(), name: c, weight: weights[c] || 0, drop: 0 }; });
         target = { id: uid(), name: name, teacher: '', level: guessLevel(name), method: anyW ? 'weighted' : 'points', categories: cats, assignments: [] };
         state.classes.push(target); state.onboarded = true;
         if (state.example) { state.classes = state.classes.filter(function(c){ return c === target; }); state.example = false; }
       }
+      if (!isNew) target.categories.forEach(function(c){ if (weights[c.name] != null) c.weight = weights[c.name]; });
       items.forEach(function(it){
-        var cat = target.categories.find(function(c){ return c.id === it.catId || c.name.toLowerCase() === String(it.catName).toLowerCase(); });
+        var cat = target.categories.find(function(c){ return c.name.toLowerCase() === String(it.catName).toLowerCase(); });
         if (!cat && it.catName) { cat = { id: uid(), name: it.catName, weight: 0, drop: 0 }; target.categories.push(cat); }
         cat = cat || target.categories[0];
         target.assignments.push({ id: uid(), name: it.name, catId: cat ? cat.id : null, earned: it.earned, possible: it.possible, date: it.date || '', status: it.status });
@@ -1341,6 +1354,7 @@ var actions = {
   'as-edit': function(el){ var a = getClass(ui.classId).assignments.find(function(x){ return x.id === el.getAttribute('data-id'); }); if (a) openAssignmentSheet(a); },
   'as-del': function(){ var cls = getClass(ui.classId), id = $('#as-form')._id; cls.assignments = cls.assignments.filter(function(a){ return a.id !== id; }); save(); closeSheet(); renderClass(ui.classId); },
   'as-paste': openPasteSheet,
+  'sim-cat': function(el){ var cls = getClass(ui.classId); simFor(cls).catId = el.getAttribute('data-id'); $$('.chips [data-act=sim-cat]').forEach(function(b){ b.setAttribute('aria-pressed', b === el); }); ui.zoneKey = null; previewPing(); refreshSim(); },
   'shot-new': function(){ openShotSheet(null); },
   'shot-add': function(){ openShotSheet(getClass(ui.classId)); },
   'as-paste-from-shot': function(){ if (ui.view === 'class') openPasteSheet(); else { closeSheet(); openClassSheet(null); } },
